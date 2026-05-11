@@ -184,9 +184,8 @@ export default function HomePage({ onGetStarted }: Props) {
             </h3>
             <p style={{ margin: 0, fontSize: '13px', color: '#3a5a2a', lineHeight: 1.7 }}>
               When you are settled in your outdoor or semi-outdoor workspace,
-              <strong> point your camera in the direction you are looking</strong> when you work.
-              Capture what is in front of you — the view, the environment, the surroundings —
-              not the laptop or desk itself.
+              <strong> point your camera in the direction you are looking</strong> when you working.
+              Capture the view in front of you.
             </p>
           </div>
 
@@ -267,18 +266,13 @@ export default function HomePage({ onGetStarted }: Props) {
       <div id="about" style={{ background: '#f0f4f0', padding: '2.5rem 1.25rem' }}>
         <div style={{ maxWidth: '480px', margin: '0 auto' }}>
           <h2 style={{ color: '#1a1a2e', fontSize: '1.25rem', margin: '0 0 1rem' }}>
-            About the Research
+            About the research
           </h2>
           <p style={{ color: '#555', fontSize: '14px', lineHeight: 1.75, margin: '0 0 1rem' }}>
             This study is conducted by the <strong>CrowdComputing research group</strong>.
             We are investigating how people use <strong>outdoor and semi-outdoor environments</strong>
             — parks, terraces, courtyards, café patios, and covered-but-open spaces —
             as places of knowledge work.
-          </p>
-          <p style={{ color: '#555', fontSize: '14px', lineHeight: 1.75, margin: '0 0 1rem' }}>
-            Working outdoors is an emerging and little-studied phenomenon. Hybrid work has
-            increased spatial flexibility, and workers are increasingly choosing outdoor
-            environments for tasks traditionally done at a desk.
           </p>
           <p style={{ color: '#555', fontSize: '14px', lineHeight: 1.75, margin: '0 0 1.5rem' }}>
             Your photos will be analysed using computer vision to detect environmental
@@ -294,9 +288,9 @@ export default function HomePage({ onGetStarted }: Props) {
             {[
               'Your gaze-direction photo of the outdoor environment',
               'Survey: location type, thermal comfort, surroundings, activity',
-              'Timestamp (to match with weather and environmental data)',
+              'Timestamp + Optional GPS (to match with weather and environmental data)',
               'Optional: approximate GPS location',
-              'Anonymous participant ID — no name stored with your data',
+              'Anonymous participant ID',
             ].map((t, i) => (
               <div key={i} style={{ display: 'flex', gap: '8px', marginBottom: '8px', fontSize: '13px', color: '#444' }}>
                 <span style={{ color: '#2d7d46', fontWeight: 700, flexShrink: 0 }}>✓</span>{t}
@@ -307,7 +301,7 @@ export default function HomePage({ onGetStarted }: Props) {
                 🚫 What we never collect
               </p>
               {[
-                'Your name, email, or contact details',
+                'Your name or contact details',
                 'Device identifiers',
                 'Any content you have blurred or blacked out',
                 'GPS data without your explicit permission',
