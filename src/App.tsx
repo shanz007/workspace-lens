@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import HomePage from './components/Home/HomePage'
 import Login from './components/Login/Login'
 import Camera from './components/Camera/Camera'
 import PrivacyEditor from './components/PrivacyEditor/PrivacyEditor'
 import { useUpload } from './hooks/useUpload'
+import Questionnaire from './components/Questionnaire/Questionnaire'
+import type { QuestionnaireResponses } from './components/Questionnaire/Questionnaire'
 
-type Screen = 'home' | 'login' | 'camera' | 'editor' | 'uploading' | 'done' | 'error'
+type Screen = 'home' | 'login' | 'camera' | 'editor' | 'uploading' | 'done' | 'error' | 'questionnaire'
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home')
@@ -14,7 +16,8 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState('')
   const { uploadPhoto } = useUpload()
   const [, setLogs] = useState<string[]>([])
-
+  const [questionnaireResponses, setQuestionnaireResponses] = useState<QuestionnaireResponses | null>(null)
+  const censoredBlobRef = useRef<Blob | null>(null)
   
   useEffect(() => {
     const saved = localStorage.getItem('participantId')
@@ -42,21 +45,26 @@ export default function App() {
     log(`Photo captured — ${(blob.size / 1024).toFixed(0)} KB`)
   }
 
-  const handleConfirm = async (censored: Blob) => {
+  const handleConfirm = async (censored: Blob, responses?: QuestionnaireResponses | null) => {
     setScreen('uploading')
-    log(`Uploading ${(censored.size / 1024).toFixed(0)} KB...`)
     setStatusMsg('Uploading...')
-    const result = await uploadPhoto(censored, participantId)
-    if (result.success) {
-      log(`✓ Uploaded to: ${result.path}`)
-      setStatusMsg('✓ Photo uploaded successfully!')
-      setScreen('done')
-    } else {
-      log(`✗ Upload failed: ${result.error}`)
-      setStatusMsg(`Upload failed: ${result.error}`)
-      setScreen('error')
-    }
+    log(`Uploading ${(censored.size / 1024).toFixed(0)} KB...`)
+  
+  const result = await uploadPhoto(censored, participantId, responses ?? undefined)
+  if (result.success) {
+    log(`✓ Uploaded to: ${result.path}`)
+    setStatusMsg('✓ Photo uploaded successfully!')
+    setScreen('done')
+  } else if (result.queued) {
+    log(`📦 Queued locally — will retry when online`)
+    setStatusMsg('No signal — photo saved and will upload when you reconnect.')
+    setScreen('done')
+  } else {
+    log(`✗ Upload failed: ${result.error}`)
+    setStatusMsg(`Upload failed: ${result.error}`)
+    setScreen('error')
   }
+}
 
   const handleRetake = () => {
     setCapturedBlob(null)
@@ -72,7 +80,7 @@ export default function App() {
     <><Login onLogin={handleLogin} onBack={() => setScreen('home')} />
     </>
   )
- 
+	 
   if (screen === 'camera') return (
   <>
     <Camera
@@ -88,7 +96,10 @@ export default function App() {
     <PrivacyEditor
       imageBlob={capturedBlob}
       participantId={participantId}
-      onConfirm={handleConfirm}
+      onConfirm={(censored) => {
+        censoredBlobRef.current = censored  // ← store immediately, no async delay
+        setScreen('questionnaire')  // go to survey before uploading
+      }}
       onRetake={handleRetake}
       onLogout={() => {
         localStorage.removeItem('participantId')
@@ -98,7 +109,29 @@ export default function App() {
   </> 
   )
 
-  if (screen === 'uploading') {
+
+  if (screen === 'questionnaire') return (
+  <>
+    <Questionnaire
+      participantId={participantId}
+      onComplete={(responses) => {
+        setQuestionnaireResponses(responses)
+        log(`ESM responses recorded — ${Object.keys(responses).length} fields`)
+        const blob = censoredBlobRef.current
+        if (!blob) { log('❌ No censored blob found'); return }
+        handleConfirm(blob, responses)
+      }}
+      onSkip={() => {
+        log('ESM survey skipped')
+        const blob = censoredBlobRef.current
+        if (!blob) { log('❌ No censored blob found'); return }
+        handleConfirm(blob, null)
+      }}
+    />
+  </>
+ )
+
+ if (screen === 'uploading') {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>⏳</div>
