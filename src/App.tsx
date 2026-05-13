@@ -16,7 +16,7 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState('')
   const { uploadPhoto } = useUpload()
   const [, setLogs] = useState<string[]>([])
-  const [questionnaireResponses, setQuestionnaireResponses] = useState<QuestionnaireResponses | null>(null)
+  const [, setQuestionnaireResponses] = useState<QuestionnaireResponses | null>(null)
   const censoredBlobRef = useRef<Blob | null>(null)
   
   useEffect(() => {

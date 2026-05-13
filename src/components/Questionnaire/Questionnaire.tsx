@@ -17,7 +17,7 @@ export interface QuestionnaireResponses {
 
 const TOTAL = 6
 
-export default function Questionnaire({ participantId, onComplete, onSkip }: Props) {
+export default function Questionnaire({ participantId: _participantId, onComplete, onSkip }: Props) {
   const [step, setStep] = useState(1)
   const [responses, setResponses] = useState<Partial<QuestionnaireResponses>>({
     surroundings: []
