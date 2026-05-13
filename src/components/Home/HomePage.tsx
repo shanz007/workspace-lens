@@ -236,10 +236,10 @@ export default function HomePage({ onGetStarted }: Props) {
           {[
             { icon: '🔑', step: '1', title: 'Log in with participant ID.' },
             { icon: '🌿', step: '2', title: 'Go to your outdoor(or semi) workspace.' },
-            { icon: '👁️', step: '3', title: 'Photograph your view in front of you.' },
-            { icon: '🛡️', step: '4', title: 'Censor anythingg(or sensitive) content you don\'t want to include using blur or drawing boxes.' },
+            { icon: '👁️', step: '3', title: 'Photograph  the view in front of you.' },
+            { icon: '🛡️', step: '4', title: 'Censor anything (or sensitive) content you don\'t want to include using blur or drawing boxes.' },
             { icon: '📋', step: '5', title: 'Answer a short survey about the location, comfort, and what you can see around you.' },
-            { icon: '☁️', step: '6', title: 'Submmit the photo upon confirming.'}          
+            { icon: '☁️', step: '6', title: 'Submmt the photo upon confirming.'}          
            ].map(item => (
             <div key={item.step} style={{
               display: 'flex', alignItems: 'flex-start', gap: '1rem',
