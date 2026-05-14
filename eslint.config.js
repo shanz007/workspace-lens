@@ -15,6 +15,11 @@ export default defineConfig([
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
+    ignores: [
+      'dist/**',
+      'dev-dist/**',
+      'node_modules/**'
+    ],
     languageOptions: {
       globals: globals.browser,
     },

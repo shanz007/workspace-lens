@@ -32,11 +32,34 @@ export default defineConfig({
             type: 'image/png'
           }
         ]
+      },
+      workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
+
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'supabase-api-cache',
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24
+              },
+              networkTimeoutSeconds: 10
+            }
+          }
+        ]
+      },
+      devOptions: {
+        enabled: true
       }
     })
   ],
   server: {
     host: true,
-    port: 443
+    port: 5173
   } 
 })
