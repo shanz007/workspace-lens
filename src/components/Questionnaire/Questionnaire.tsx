@@ -1,7 +1,6 @@
 import { useState } from 'react'
 
 interface Props {
-  participantId: string
   onComplete: (responses: QuestionnaireResponses) => void
   onSkip: () => void
 }
@@ -13,11 +12,13 @@ export interface QuestionnaireResponses {
   naturalLight: 1 | 2 | 3 | 4 | 5
   noiseLevel: 'quiet' | 'moderate' | 'loud'
   activity: 'deep-focus' | 'meeting' | 'admin' | 'break'
+  shelter: 'yes' | 'partial' | 'no'
+  affordanceRating: 1 | 2 | 3 | 4 | 5
 }
 
-const TOTAL = 6
+const TOTAL = 8
 
-export default function Questionnaire({ participantId: _participantId, onComplete, onSkip }: Props) {
+export default function Questionnaire({onComplete, onSkip }: Props) {
   const [step, setStep] = useState(1)
   const [responses, setResponses] = useState<Partial<QuestionnaireResponses>>({
     surroundings: []
@@ -61,6 +62,12 @@ export default function Questionnaire({ participantId: _participantId, onComplet
     }
     if (step === 6 && !responses.activity) {
       setError('Please select your current activity'); return
+    }
+    if (step === 7 && !responses.shelter) {
+      setError('Please select a shelter option'); return
+    }
+    if (step === 8 && !responses.affordanceRating) {
+      setError('Please rate how well this environment supports your work'); return
     }
 
     if (step < TOTAL) {
@@ -254,7 +261,7 @@ export default function Questionnaire({ participantId: _participantId, onComplet
         {/* ── Q1 — Location type ── */}
         {step === 1 && (
           <>
-            <p style={S.stepLabel}>QUESTION 1 OF 6</p>
+            <p style={S.stepLabel}>QUESTION 1 OF 8</p>
             <p style={S.question}>Where are you working right now?</p>
             <p style={S.pOKW2hint}>pOKW2: location type classification</p>
             <div style={S.optGrid}>
@@ -280,7 +287,7 @@ export default function Questionnaire({ participantId: _participantId, onComplet
         {/* ── Q2 — Thermal comfort ── */}
         {step === 2 && (
           <>
-            <p style={S.stepLabel}>QUESTION 2 OF 6</p>
+            <p style={S.stepLabel}>QUESTION 2 OF 8</p>
             <p style={S.question}>How comfortable is the temperature right now?</p>
             <p style={S.pOKW2hint}>pOKW2: thermal comfort rating</p>
             <div style={S.scaleRow}>
@@ -305,7 +312,7 @@ export default function Questionnaire({ participantId: _participantId, onComplet
         {/* ── Q3 — Surroundings (multi-select) ── */}
         {step === 3 && (
           <>
-            <p style={S.stepLabel}>QUESTION 3 OF 6</p>
+            <p style={S.stepLabel}>QUESTION 3 OF 8</p>
             <p style={S.question}>What do you see in front of you?</p>
             <p style={S.pOKW2hint}>pOKW2: environment type — select all that apply</p>
             <div style={S.optGrid}>
@@ -333,7 +340,7 @@ export default function Questionnaire({ participantId: _participantId, onComplet
         {/* ── Q4 — Natural light ── */}
         {step === 4 && (
           <>
-            <p style={S.stepLabel}>QUESTION 4 OF 6</p>
+            <p style={S.stepLabel}>QUESTION 4 OF 8</p>
             <p style={S.question}>How much natural light is reaching you?</p>
             <p style={S.pOKW2hint}>pOKW2: light quality assessment</p>
             <div style={S.scaleRow}>
@@ -358,7 +365,7 @@ export default function Questionnaire({ participantId: _participantId, onComplet
         {/* ── Q5 — Noise level ── */}
         {step === 5 && (
           <>
-            <p style={S.stepLabel}>QUESTION 5 OF 6</p>
+            <p style={S.stepLabel}>QUESTION 5 OF 8</p>
             <p style={S.question}>How noisy is your current environment?</p>
             <p style={S.pOKW2hint}>pOKW2: acoustic environment</p>
             <div style={{ ...S.optGrid, gridTemplateColumns: '1fr' }}>
@@ -393,7 +400,7 @@ export default function Questionnaire({ participantId: _participantId, onComplet
         {/* ── Q6 — Activity ── */}
         {step === 6 && (
           <>
-            <p style={S.stepLabel}>QUESTION 6 OF 6</p>
+            <p style={S.stepLabel}>QUESTION 6 OF 8</p>
             <p style={S.question}>What are you working on right now?</p>
             <p style={S.pOKW2hint}>pOKW2: activity context</p>
             <div style={S.optGrid}>
@@ -415,6 +422,120 @@ export default function Questionnaire({ participantId: _participantId, onComplet
             </div>
           </>
         )}
+        {/* ── Q7 — Shelter / wind protection ── */}
+{step === 7 && (
+  <>
+    <p style={S.stepLabel}>QUESTION 7 OF 8</p>
+    <p style={S.question}>Are you sheltered from wind or rain?</p>
+    <p style={S.pOKW2hint}>pOKW2: semi-outdoor classification — shelter indicator</p>
+    <div style={{ ...S.optGrid, gridTemplateColumns: '1fr' }}>
+      {([
+        {
+          val: 'yes',
+          icon: '🏠',
+          label: 'Yes — fully sheltered',
+          sub: 'Roof, canopy, or structure overhead'
+        },
+        {
+          val: 'partial',
+          icon: '⛱️',
+          label: 'Partially sheltered',
+          sub: 'Some protection — umbrella, trees, overhang'
+        },
+        {
+          val: 'no',
+          icon: '🌤️',
+          label: 'No shelter',
+          sub: 'Fully exposed to weather'
+        },
+      ] as const).map(opt => (
+        <button
+          key={opt.val}
+          onClick={() => set('shelter', opt.val)}
+          style={{
+            ...optStyle(responses.shelter === opt.val),
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            textAlign: 'left' as const,
+            padding: '14px 16px'
+          }}
+        >
+          <span style={{ fontSize: '24px', flexShrink: 0 }}>{opt.icon}</span>
+          <span>
+            <span style={{ display: 'block', fontWeight: 600, marginBottom: '2px' }}>
+              {opt.label}
+            </span>
+            <span style={{
+              fontSize: '11px',
+              color: responses.shelter === opt.val ? '#3a5a2a' : '#aaa'
+            }}>
+              {opt.sub}
+            </span>
+          </span>
+        </button>
+      ))}
+    </div>
+  </>
+)}
+
+{/* ── Q8 — Affordance rating (pOKW2 Additional Question) ── */}
+{step === 8 && (
+  <>
+    <p style={S.stepLabel}>QUESTION 8 OF 8</p>
+    <p style={S.question}>
+      How well does this environment support your knowledge work right now?
+    </p>
+    <p style={S.pOKW2hint}>
+      pOKW2 Additional Question (AQ) — core analytical output
+    </p>
+
+    {/* Visual scale with labels */}
+    <div style={{ marginBottom: '8px' }}>
+      <div style={S.scaleRow}>
+        {([1, 2, 3, 4, 5] as const).map(n => (
+          <button
+            key={n}
+            onClick={() => set('affordanceRating', n)}
+            style={{
+              ...scaleStyle(n, responses.affordanceRating),
+              fontSize: '18px'
+            }}
+          >
+            {['😟', '😕', '😐', '🙂', '😊'][n - 1]}
+          </button>
+        ))}
+      </div>
+      <div style={S.scaleLabels}>
+        <span>Hinders work</span>
+        <span>Neutral</span>
+        <span>Supports work</span>
+      </div>
+    </div>
+
+    {/* Selected value description */}
+    {responses.affordanceRating && (
+      <div style={{
+        background: '#f0f9e8',
+        border: '1.5px solid #7dc355',
+        borderRadius: '10px',
+        padding: '10px 14px',
+        marginBottom: '1.25rem',
+        fontSize: '13px',
+        color: '#1a2e1a',
+        textAlign: 'center' as const
+      }}>
+        {[
+          'This environment significantly hinders your ability to work',
+          'This environment somewhat hinders your work',
+          'This environment neither helps nor hinders your work',
+          'This environment somewhat supports your work',
+          'This environment strongly supports your ability to work',
+        ][responses.affordanceRating - 1]}
+      </div>
+    )}
+  </>
+)}
 
         {/* ── Validation error ── */}
         {error && (

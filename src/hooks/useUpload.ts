@@ -1,6 +1,33 @@
 import { supabase } from '../lib/supabase'
 import type { QuestionnaireResponses } from '../components/Questionnaire/Questionnaire'
 
+interface GPSCoords {
+  lat: number
+  lng: number
+  accuracy: number
+}
+
+const getGPS = (): Promise<GPSCoords | null> =>
+  new Promise(resolve => {
+    if (!navigator.geolocation) {
+      console.log('ℹ️ Geolocation not supported')
+      resolve(null)
+      return
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => resolve({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: pos.coords.accuracy
+      }),
+      err => {
+        console.log('ℹ️ GPS declined or unavailable:', err.message)
+        resolve(null)  // graceful — never blocks upload
+      },
+      { timeout: 8000, maximumAge: 60000 }
+    )
+})
+
 interface UploadResult {
   success: boolean
   path?: string
@@ -38,58 +65,69 @@ const queueLocally = async (blob: Blob, participantId: string, type: 'jpg' | 'js
 export function useUpload() {
 
   const uploadPhoto = async (
-    blob: Blob,
-    participantId: string,
-    responses?: QuestionnaireResponses
-  ): Promise<UploadResult> => {
+  blob: Blob,
+  participantId: string,
+  responses?: QuestionnaireResponses
+): Promise<UploadResult> => {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const photoPath = `${participantId}/${timestamp}.jpg`
+  const jsonPath  = `${participantId}/${timestamp}.json`
 
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    const photoPath = `${participantId}/${timestamp}.jpg`
-    const jsonPath  = `${participantId}/${timestamp}.json`
+  // ── capture GPS + upload photo in parallel ────────────────────────────────
+  console.log('📷 Uploading photo to:', photoPath)
+  console.log('📍 Requesting GPS...')
 
-    // ── upload photo ──────────────────────────────────────────────────────────
-    console.log('📷 Uploading photo to:', photoPath)
-    const { error: photoError } = await supabase.storage
+  const [photoResult, gps] = await Promise.all([
+    supabase.storage
       .from('workspace-photos')
-      .upload(photoPath, blob, { contentType: 'image/jpeg', upsert: false })
+      .upload(photoPath, blob, { contentType: 'image/jpeg', upsert: false }),
+    getGPS()
+  ])
 
-    if (photoError) {
-      console.error('❌ Photo upload failed:', photoError.message)
-      await queueLocally(blob, participantId, 'jpg')
-      return { success: false, error: photoError.message, queued: true }
-    }
-
-    console.log('✅ Photo uploaded:', photoPath)
-
-    // ── upload JSON ───────────────────────────────────────────────────────────
-    if (responses) {
-      console.log('📋 Uploading ESM responses to:', jsonPath)
-      console.log('📋 Payload:', JSON.stringify(responses, null, 2))
-
-      const payload = JSON.stringify({
-        participantId,
-        studyId: import.meta.env.VITE_STUDY_ID,
-        timestamp: new Date().toISOString(),
-        responses
-      }, null, 2)
-
-      const jsonBlob = new Blob([payload], { type: 'application/json' })
-
-      const { error: jsonError } = await supabase.storage
-        .from('workspace-photos')
-        .upload(jsonPath, jsonBlob, { contentType: 'application/json', upsert: false })
-
-      if (jsonError) {
-        console.error('❌ JSON upload failed:', jsonError.message)
-      } else {
-        console.log('✅ JSON uploaded:', jsonPath)
-      }
-    } else {
-      console.log('ℹ️ No ESM responses — skipping JSON upload')
-    }
-
-    return { success: true, path: photoPath }
+  if (gps) {
+    console.log(`📍 GPS acquired: ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)} (±${gps.accuracy.toFixed(0)}m)`)
+  } else {
+    console.log('📍 GPS not available — continuing without')
   }
+
+  if (photoResult.error) {
+    console.error('❌ Photo upload failed:', photoResult.error.message)
+    await queueLocally(blob, participantId, 'jpg')
+    return { success: false, error: photoResult.error.message, queued: true }
+  }
+
+  console.log('✅ Photo uploaded:', photoPath)
+
+  // ── upload JSON ───────────────────────────────────────────────────────────
+  if (responses) {
+    console.log('📋 Uploading ESM responses to:', jsonPath)
+    console.log('📋 Payload:', JSON.stringify(responses, null, 2))
+
+    const payload = JSON.stringify({
+      participantId,
+      studyId: import.meta.env.VITE_STUDY_ID,
+      timestamp: new Date().toISOString(),
+      gps: gps ?? null,
+      responses
+    }, null, 2)
+
+    const jsonBlob = new Blob([payload], { type: 'application/json' })
+
+    const { error: jsonError } = await supabase.storage
+      .from('workspace-photos')
+      .upload(jsonPath, jsonBlob, { contentType: 'application/json', upsert: false })
+
+    if (jsonError) {
+      console.error('❌ JSON upload failed:', jsonError.message)
+    } else {
+      console.log('✅ JSON uploaded:', jsonPath)
+    }
+  } else {
+    console.log('ℹ️ No ESM responses — skipping JSON upload')
+  }
+
+  return { success: true, path: photoPath }
+}
 
   const retryQueue = async () => {
     const queue: QueueItem[] = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]')

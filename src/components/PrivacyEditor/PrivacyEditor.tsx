@@ -23,16 +23,17 @@ export default function PrivacyEditor({ imageBlob, participantId, onConfirm, onR
   const [reviewed, setReviewed] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const [validationError, setValidationError] = useState('')
-  const [fileSizeError, setFileSizeError] = useState('')
   const [showLogout, setShowLogout] = useState(false)
 
-  useEffect(() => {
+  const [fileSizeError] = useState<string>(
+  () => {
     const sizeKB = imageBlob.size / 1024
-    if (sizeKB < MIN_FILE_SIZE_KB) {
-      setFileSizeError(
-        `This photo appears too small (${sizeKB.toFixed(0)} KB). Please retake with a real workspace photo.`
-      )
-    }
+    return sizeKB < MIN_FILE_SIZE_KB
+      ? `This photo appears too small (${sizeKB.toFixed(0)} KB). Please retake with a real workspace photo.`
+      : ''
+  }
+  )
+  useEffect(() => {
     const url = URL.createObjectURL(imageBlob)
     imageRef.current.onload = () => {
       const canvas = canvasRef.current!

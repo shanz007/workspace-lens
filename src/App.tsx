@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import HomePage from './components/Home/HomePage'
 import Login from './components/Login/Login'
 import Camera from './components/Camera/Camera'
@@ -10,8 +10,12 @@ import type { QuestionnaireResponses } from './components/Questionnaire/Question
 type Screen = 'home' | 'login' | 'camera' | 'editor' | 'uploading' | 'done' | 'error' | 'questionnaire'
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('home')
-  const [participantId, setParticipantId] = useState('')
+  const [participantId, setParticipantId] = useState<string>(
+    () => localStorage.getItem('participantId') ?? ''
+  )
+  const [screen, setScreen] = useState<Screen>(
+    () => localStorage.getItem('participantId') ? 'camera' : 'home'
+  )
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null)
   const [statusMsg, setStatusMsg] = useState('')
   const { uploadPhoto } = useUpload()
@@ -19,15 +23,6 @@ export default function App() {
   const [, setQuestionnaireResponses] = useState<QuestionnaireResponses | null>(null)
   const censoredBlobRef = useRef<Blob | null>(null)
   
-  useEffect(() => {
-    const saved = localStorage.getItem('participantId')
-    if (saved) {
-      setParticipantId(saved)
-      setScreen('camera')  // returning participant — skip home and login
-    }
-    // new participant starts at home
-  }, [])
-
   const log = (msg: string) => {
     const time = new Date().toLocaleTimeString()
     setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 20))
@@ -113,7 +108,6 @@ export default function App() {
   if (screen === 'questionnaire') return (
   <>
     <Questionnaire
-      participantId={participantId}
       onComplete={(responses) => {
         setQuestionnaireResponses(responses)
         log(`ESM responses recorded — ${Object.keys(responses).length} fields`)
