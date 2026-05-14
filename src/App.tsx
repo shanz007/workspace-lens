@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import HomePage from './components/Home/HomePage'
 import Login from './components/Login/Login'
 import Camera from './components/Camera/Camera'
@@ -9,6 +9,7 @@ import type { QuestionnaireResponses } from './components/Questionnaire/Question
 
 type Screen = 'home' | 'login' | 'camera' | 'editor' | 'uploading' | 'done' | 'error' | 'questionnaire'
 
+
 export default function App() {
   const [participantId, setParticipantId] = useState<string>(
     () => localStorage.getItem('participantId') ?? ''
@@ -18,11 +19,16 @@ export default function App() {
   )
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null)
   const [statusMsg, setStatusMsg] = useState('')
-  const { uploadPhoto } = useUpload()
+  const { uploadPhoto, retryQueue } = useUpload()
   const [, setLogs] = useState<string[]>([])
   const [, setQuestionnaireResponses] = useState<QuestionnaireResponses | null>(null)
   const censoredBlobRef = useRef<Blob | null>(null)
   
+  useEffect(() => {
+    retryQueue()
+    console.log('App loaded — checking offline queue...')
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   const log = (msg: string) => {
     const time = new Date().toLocaleTimeString()
     setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 20))
@@ -114,12 +120,6 @@ export default function App() {
         const blob = censoredBlobRef.current
         if (!blob) { log('❌ No censored blob found'); return }
         handleConfirm(blob, responses)
-      }}
-      onSkip={() => {
-        log('ESM survey skipped')
-        const blob = censoredBlobRef.current
-        if (!blob) { log('❌ No censored blob found'); return }
-        handleConfirm(blob, null)
       }}
     />
   </>

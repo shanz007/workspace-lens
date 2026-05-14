@@ -1,3 +1,4 @@
+import { supabase } from '../../lib/supabase'
 import { useState } from 'react'
 
 interface Props {
@@ -9,19 +10,70 @@ export default function Login({ onLogin, onBack }: Props) {
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = () => {
-    const trimmed = value.trim().toUpperCase()
-    if (!trimmed) {
-      setError('Please enter your participant ID')
-      return
-    }
-    if (!/^[A-Z0-9]{2,10}$/.test(trimmed)) {
-      setError('ID should be 2–10 letters or numbers (e.g. P007)')
-      return
-    }
-    localStorage.setItem('participantId', trimmed)
-    onLogin(trimmed)
+  const [loading, setLoading] = useState(false)
+
+const handleSubmit = async () => {
+  const trimmed = value.trim().toUpperCase()
+
+  if (!trimmed) {
+    setError('Please enter your participant ID')
+    return
   }
+
+  setLoading(true)
+  setError('')
+
+  // check if already validated previously — allow offline login
+  const cachedIds = JSON.parse(localStorage.getItem('validatedIds') || '[]')
+  if (cachedIds.includes(trimmed)) {
+    localStorage.setItem('participantId', trimmed)
+    setLoading(false)
+    onLogin(trimmed)
+    return
+  }
+
+try {// validate against Supabase participants table
+  const { data, error: dbError } = await supabase
+    .from('participants')
+    .select('participant_id, active')
+    .eq('participant_id', trimmed)
+    .single()
+
+  setLoading(false)
+
+  if (dbError || !data) {
+    setError('ID not recognised. Please check your invitation email and try again.')
+    setLoading(false)
+    return
+  }
+
+  if (!data.active) {
+    setError('This participant ID is no longer active. Please contact the research team.')
+    setLoading(false)
+    return
+  }
+
+  //cache the validated ID for offline use
+    const updated = [...cachedIds, trimmed]
+    localStorage.setItem('validatedIds', JSON.stringify(updated))
+
+  }catch {
+    // network unavailable — check if we've seen this ID before
+    if (cachedIds.includes(trimmed)) {
+      localStorage.setItem('participantId', trimmed)
+      setLoading(false)
+      onLogin(trimmed)
+      return
+    }
+    setError('No internet connection. Please connect to validate your ID for the first time.')
+    setLoading(false)
+    return
+  }
+
+  localStorage.setItem('participantId', trimmed)
+  setLoading(false)
+  onLogin(trimmed)
+}
 
   return (
     <div style={{
@@ -156,20 +208,21 @@ export default function Login({ onLogin, onBack }: Props) {
             </p>
           )}
 
-          <button
-            onClick={handleSubmit}
-            style={{
-              width: '100%', padding: '15px',
-              background: '#1a2e1a', color: '#fff',
-              border: 'none', borderRadius: '10px',
-              fontSize: '16px', fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(26,46,26,0.3)'
-            }}
-          >
-            Continue →
-          </button>
-        </div>
+        <button
+  onClick={handleSubmit}
+  disabled={loading}
+  style={{
+    width: '100%', padding: '15px',
+    background: loading ? '#555' : '#1a2e1a',
+    color: '#fff', border: 'none',
+    borderRadius: '10px', fontSize: '16px',
+    fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer',
+    transition: 'background 0.2s'
+  }}
+>
+  {loading ? 'Checking...' : 'Continue →'}
+</button>
+</div>
 
         {/* Info strip */}
         <div style={{

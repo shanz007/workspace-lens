@@ -110,10 +110,6 @@ export default function PrivacyEditor({ imageBlob, participantId, onConfirm, onR
 
   const handleUploadTap = () => {
     if (fileSizeError) { setValidationError(fileSizeError); return }
-    if (actionCount === 0) {
-      setValidationError('Please draw at least one black box or blur over sensitive areas before uploading.')
-      return
-    }
     if (!reviewed) {
       setValidationError('Please confirm you have reviewed the image before uploading.')
       return
@@ -281,7 +277,7 @@ export default function PrivacyEditor({ imageBlob, participantId, onConfirm, onR
             </button>
 
             {/* Action count badge */}
-            {actionCount > 0 && (
+            {actionCount >= 0 && (
               <div style={{
                 background: '#e1f5ee',
                 border: '1px solid #7dc355',
@@ -302,7 +298,7 @@ export default function PrivacyEditor({ imageBlob, participantId, onConfirm, onR
         {/* Instruction hint */}
         <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#888', lineHeight: 1.4 }}>
           {tool === 'blackbox'
-            ? '⬛ Drag to draw black boxes over faces, screens, or names.'
+            ? '⬛ Drag to draw black boxes over faces, screens, or names to mask.'
             : '🌫 Drag to pixelate sensitive areas.'}
         </p>
       </div>
@@ -331,7 +327,7 @@ export default function PrivacyEditor({ imageBlob, participantId, onConfirm, onR
       }}>
 
         {/* Review checkbox */}
-        {actionCount > 0 && (
+        {actionCount >= 0 && (
           <label style={{
             display: 'flex', alignItems: 'center', gap: '10px',
             marginBottom: '10px', cursor: 'pointer',
@@ -373,7 +369,7 @@ export default function PrivacyEditor({ imageBlob, participantId, onConfirm, onR
             borderRadius: '8px', padding: '8px 12px',
             marginBottom: '10px', fontSize: '13px', color: '#7a5f00'
           }}>
-            ⚠️ Last chance — tap <strong>Confirm & Send</strong> to upload.
+            ⚠️ Once submitted, it cannot be edited or deleted. Tap <strong>Confirm &amp; Send</strong> to proceed to survey.
           </div>
         )}
 

@@ -2,7 +2,6 @@ import { useState } from 'react'
 
 interface Props {
   onComplete: (responses: QuestionnaireResponses) => void
-  onSkip: () => void
 }
 
 export interface QuestionnaireResponses {
@@ -18,7 +17,7 @@ export interface QuestionnaireResponses {
 
 const TOTAL = 8
 
-export default function Questionnaire({onComplete, onSkip }: Props) {
+export default function Questionnaire({onComplete }: Props) {
   const [step, setStep] = useState(1)
   const [responses, setResponses] = useState<Partial<QuestionnaireResponses>>({
     surroundings: []
@@ -542,17 +541,6 @@ export default function Questionnaire({onComplete, onSkip }: Props) {
           <div style={S.errorBox}>⚠ {error}</div>
         )}
 
-        {/* ── Skip option ── */}
-        {step === 1 && (
-          <p style={{ textAlign: 'center', fontSize: '12px', color: '#aaa', marginBottom: '8px' }}>
-            <button
-              onClick={onSkip}
-              style={{ background: 'none', border: 'none', color: '#aaa', cursor: 'pointer', textDecoration: 'underline', fontSize: '12px' }}
-            >
-              Skip survey and upload photo only
-            </button>
-          </p>
-        )}
 
         {/* ── Navigation buttons ── */}
         <div style={S.navRow}>
