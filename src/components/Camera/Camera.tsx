@@ -6,13 +6,56 @@ interface Props {
   onLogout: () => void;
 }
 
+// ── Image compression ─────────────────────────────────────────────────────────
+const compressImage = (file: File | Blob): Promise<Blob> =>
+  new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+
+      // max 1280px on longest side — good for vision analysis, small enough for APIs
+      const MAX = 1280;
+      let { width, height } = img;
+      if (width > MAX || height > MAX) {
+        if (width > height) {
+          height = Math.round((height * MAX) / width);
+          width = MAX;
+        } else {
+          width = Math.round((width * MAX) / height);
+          height = MAX;
+        }
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+
+      // 80% JPEG quality — typically 200–500 KB for outdoor photos
+      canvas.toBlob((blob) => resolve(blob!), "image/jpeg", 0.8);
+    };
+    img.src = url;
+  });
+
 export default function Camera({ participantId, onCapture, onLogout }: Props) {
   const [showLogout, setShowLogout] = useState(false);
+  const [compressing, setCompressing] = useState(false);
 
-  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    onCapture(file);
+
+    setCompressing(true);
+    console.log(`📷 Original size: ${(file.size / 1024).toFixed(0)} KB`);
+
+    const compressed = await compressImage(file);
+    console.log(
+      `📷 Compressed size: ${(compressed.size / 1024).toFixed(0)} KB`,
+    );
+
+    setCompressing(false);
+    onCapture(compressed);
   };
 
   return (
@@ -43,7 +86,6 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
           🌿 WorkspaceLens
         </span>
 
-        {/* Participant badge — tap to show logout */}
         <button
           onClick={() => setShowLogout((o) => !o)}
           style={{
@@ -80,7 +122,6 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
             minWidth: "200px",
           }}
         >
-          {/* User info */}
           <div
             style={{
               padding: "12px 16px",
@@ -111,7 +152,6 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
             </p>
           </div>
 
-          {/* Logout button */}
           <button
             onClick={() => {
               localStorage.removeItem("participantId");
@@ -136,7 +176,6 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
             Log out
           </button>
 
-          {/* Cancel */}
           <button
             onClick={() => setShowLogout(false)}
             style={{
@@ -160,7 +199,7 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
         </div>
       )}
 
-      {/* Backdrop — tap outside to close dropdown */}
+      {/* Backdrop */}
       {showLogout && (
         <div
           onClick={() => setShowLogout(false)}
@@ -198,7 +237,7 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
             marginBottom: "1.25rem",
           }}
         >
-          👁️
+          {compressing ? "⏳" : "👁️"}
         </div>
 
         <h1
@@ -211,35 +250,65 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
             lineHeight: 1.3,
           }}
         >
-          Capture Your View
+          {compressing ? "Processing photo..." : "Capture Your View"}
         </h1>
 
         {/* Key instruction */}
-        <div
-          style={{
-            background: "rgba(168,224,99,0.12)",
-            border: "1.5px solid rgba(168,224,99,0.3)",
-            borderRadius: "14px",
-            padding: "1rem 1.25rem",
-            marginBottom: "2rem",
-            maxWidth: "340px",
-            width: "100%",
-          }}
-        >
-          <p
+        {!compressing && (
+          <div
             style={{
-              margin: 0,
-              fontSize: "14px",
-              color: "#a8e063",
-              lineHeight: 1.7,
+              background: "rgba(168,224,99,0.12)",
+              border: "1.5px solid rgba(168,224,99,0.3)",
+              borderRadius: "14px",
+              padding: "1rem 1.25rem",
+              marginBottom: "2rem",
+              maxWidth: "340px",
+              width: "100%",
+            }}
+          >
+            <p
+              style={{
+                margin: 0,
+                fontSize: "14px",
+                color: "#a8e063",
+                lineHeight: 1.7,
+                textAlign: "center",
+              }}
+            >
+              Point your camera in the{" "}
+              <strong>direction you are looking</strong> while working — capture
+              your <strong>view and surroundings</strong>, not your desk or
+              laptop.
+            </p>
+          </div>
+        )}
+
+        {/* Compressing indicator */}
+        {compressing && (
+          <div
+            style={{
+              background: "rgba(168,224,99,0.12)",
+              border: "1.5px solid rgba(168,224,99,0.3)",
+              borderRadius: "14px",
+              padding: "1rem 1.25rem",
+              marginBottom: "2rem",
+              maxWidth: "340px",
+              width: "100%",
               textAlign: "center",
             }}
           >
-            Point your camera in the <strong>direction you are looking</strong>{" "}
-            while working — capture your <strong>view and surroundings</strong>,
-            not your desk or laptop.
-          </p>
-        </div>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "14px",
+                color: "#a8e063",
+                lineHeight: 1.7,
+              }}
+            >
+              Optimising photo for upload...
+            </p>
+          </div>
+        )}
 
         {/* Camera button */}
         <label
@@ -251,80 +320,55 @@ export default function Camera({ participantId, onCapture, onLogout }: Props) {
             width: "100%",
             maxWidth: "340px",
             padding: "20px",
-            background: "#f6c90e",
+            background: compressing ? "rgba(246,201,14,0.4)" : "#f6c90e",
             color: "#1a2e1a",
             borderRadius: "16px",
-            cursor: "pointer",
+            cursor: compressing ? "not-allowed" : "pointer",
             fontSize: "18px",
             fontWeight: 700,
             boxShadow: "0 6px 24px rgba(246,201,14,0.4)",
             userSelect: "none",
             WebkitTapHighlightColor: "transparent",
             marginBottom: "1.5rem",
+            transition: "background 0.2s",
           }}
         >
-          📷 Take Photo
+          {compressing ? "⏳ Processing..." : "📷 Take Photo"}
           <input
             type="file"
             accept="image/*"
             capture="environment"
             onChange={handleFileInput}
+            disabled={compressing}
             style={{ display: "none" }}
           />
         </label>
 
-        {/* Checklist 
-        <div style={{
-          width: '100%', maxWidth: '340px',
-          background: 'rgba(255,255,255,0.07)',
-          borderRadius: '14px',
-          padding: '1rem 1.25rem',
-          marginBottom: '1.5rem'
-        }}>
-          <p style={{
-            margin: '0 0 10px', fontSize: '11px',
-            fontWeight: 700, color: '#7a8a9a',
-            letterSpacing: '0.06em'
-          }}>
-            BEFORE YOU SHOOT
-          </p>
-          {[
-            { icon: '🌿', text: 'You are in an outdoor or semi-outdoor space' },
-            { icon: '👁️', text: 'Camera points in your gaze direction' },
-            { icon: '🛡️', text: 'You\'ll be able to blur faces after' },
-          ].map((item, i) => (
-            <div key={i} style={{
-              display: 'flex', gap: '10px',
-              alignItems: 'flex-start',
-              marginBottom: i < 2 ? '8px' : 0
-            }}>
-              <span style={{ fontSize: '15px', flexShrink: 0 }}>{item.icon}</span>
-              <span style={{ fontSize: '13px', color: '#aab4be', lineHeight: 1.5 }}>
-                {item.text}
-              </span>
-            </div>
-          ))}
-        </div> */}
-
         {/* Info strip */}
-        <div
-          style={{ display: "flex", gap: "1.5rem", justifyContent: "center" }}
-        >
-          {[
-            { icon: "🔒", label: "Secure upload" },
-            { icon: "👤", label: "Anonymous" },
-            { icon: "✏️", label: "Edit before send" },
-          ].map((item, i) => (
-            <div key={i} style={{ textAlign: "center" }}>
-              <div style={{ fontSize: "16px" }}>{item.icon}</div>
-              <div
-                style={{ fontSize: "11px", color: "#5a6a7a", marginTop: "3px" }}
-              >
-                {item.label}
+        {!compressing && (
+          <div
+            style={{ display: "flex", gap: "1.5rem", justifyContent: "center" }}
+          >
+            {[
+              { icon: "🔒", label: "Secure upload" },
+              { icon: "👤", label: "Anonymous" },
+              { icon: "✏️", label: "Edit before send" },
+            ].map((item, i) => (
+              <div key={i} style={{ textAlign: "center" }}>
+                <div style={{ fontSize: "16px" }}>{item.icon}</div>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#5a6a7a",
+                    marginTop: "3px",
+                  }}
+                >
+                  {item.label}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
