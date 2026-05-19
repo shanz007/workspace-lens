@@ -39,6 +39,8 @@ Thumbs.db
 # Supabase local temp files — contains project ref and connection details
 supabase/.temp/
 supabase/.branches/
+supabase.deb
+*.deb
 
 # Supabase functions local serving
 supabase/functions/.env
