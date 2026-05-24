@@ -37,9 +37,10 @@ Scoring guide:
 
 // ── Free vision models to try in order ───────────────────────────────────────
 const FREE_VISION_MODELS = [
+  'google/gemini-2.5-flash',
+  'openai/gpt-4o-mini',
+  'anthropic/claude-sonnet-4-5',
   'meta-llama/llama-3.2-11b-vision-instruct:free',
-  'nvidia/nemotron-nano-12b-v2-vl:free',
-  'google/gemma-3-12b-it:free',
   'openrouter/free',
 ]
 
