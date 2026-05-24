@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import HomePage from "./components/Home/HomePage";
+import AdminPanel from "./components/Admin/AdminPanel";
 import Login from "./components/Login/Login";
 import Camera from "./components/Camera/Camera";
 import PrivacyEditor from "./components/PrivacyEditor/PrivacyEditor";
@@ -15,15 +16,24 @@ type Screen =
   | "uploading"
   | "done"
   | "error"
-  | "questionnaire";
+  | "questionnaire"
+  | "admin";
 
 export default function App() {
   const [participantId, setParticipantId] = useState<string>(
     () => localStorage.getItem("participantId") ?? "",
   );
-  const [screen, setScreen] = useState<Screen>(() =>
-    localStorage.getItem("participantId") ? "camera" : "home",
-  );
+
+  const [screen, setScreen] = useState<Screen>(() => {
+    // check for /admin route
+    if (window.location.pathname === "/admin") {
+      const sessionToken = sessionStorage.getItem("adminToken");
+      if (sessionToken === import.meta.env.VITE_ADMIN_TOKEN) return "admin";
+      return "admin"; // show admin login screen
+    }
+    return localStorage.getItem("participantId") ? "camera" : "home";
+  });
+
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [statusMsg, setStatusMsg] = useState("");
   const { uploadPhoto, retryQueue } = useUpload();
@@ -277,6 +287,9 @@ export default function App() {
       </div>
     );
   }
+
+  if (screen === "admin")
+    return <AdminPanel onUnauthorised={() => setScreen("home")} />;
 
   return null;
 }
