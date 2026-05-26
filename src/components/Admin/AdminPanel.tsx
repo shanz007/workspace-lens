@@ -1,8 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-
-interface Props {
-  onUnauthorised: () => void;
-}
+import { useState, useEffect, useRef } from "react";
 
 interface Submission {
   id: string;
@@ -711,7 +707,7 @@ function AdminLogin({ onSuccess }: { onSuccess: (token: string) => void }) {
 }
 
 // ── Main AdminPanel ───────────────────────────────────────────────────────────
-export default function AdminPanel({ onUnauthorised }: Props) {
+export default function AdminPanel() {
   const [token, setToken] = useState<string | null>(() =>
     sessionStorage.getItem("adminJWT"),
   );
@@ -721,20 +717,30 @@ export default function AdminPanel({ onUnauthorised }: Props) {
   const [selected, setSelected] = useState<Submission | null>(null);
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = () => setReloadKey((k) => k + 1);
 
-  const fetchData = useCallback(
-    async (jwt: string, pageNum = 0, loc = "all") => {
+  useEffect(() => {
+    if (!token) return;
+
+    let cancelled = false;
+
+    const load = async () => {
       setLoading(true);
       setError("");
+
       try {
         const params = new URLSearchParams({
-          page: String(pageNum),
-          ...(loc !== "all" && { location: loc }),
+          page: String(page),
+          ...(filter !== "all" && { location: filter }),
         });
 
         const res = await fetch(`${EDGE_URL}/data?${params}`, {
-          headers: { Authorization: `Bearer ${jwt}` },
+          headers: { Authorization: `Bearer ${token}` },
         });
+
+        if (cancelled) return;
 
         if (res.status === 401) {
           sessionStorage.removeItem("adminJWT");
@@ -745,8 +751,8 @@ export default function AdminPanel({ onUnauthorised }: Props) {
         if (!res.ok) throw new Error(`Failed to load data: ${res.status}`);
 
         const json = await res.json();
+        if (cancelled) return;
 
-        // build analyses map
         const analysisMap: Record<string, Analysis> = {};
         json.analyses?.forEach((a: Analysis) => {
           analysisMap[a.photo_path] = a;
@@ -760,25 +766,22 @@ export default function AdminPanel({ onUnauthorised }: Props) {
           total: json.total,
         });
       } catch (err) {
-        const e = err as Error;
-        setError(e.message);
+        if (!cancelled) setError((err as Error).message);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    },
-    [],
-  );
+    };
 
-  useEffect(() => {
-    if (!token) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchData(token, page, filter);
-  }, [token, page, filter, fetchData]);
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token, page, filter, reloadKey]);
 
   const handleLogout = () => {
     sessionStorage.removeItem("adminJWT");
     setToken(null);
-    onUnauthorised();
   };
 
   const exportCSV = () => {
@@ -832,11 +835,11 @@ export default function AdminPanel({ onUnauthorised }: Props) {
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}
     >
-      {/* navbar */}
+      {/* ── NAVBAR ── */}
       <nav
         style={{
           background: T.green,
-          padding: "0 1.5rem",
+          padding: "0 1.25rem",
           height: "56px",
           display: "flex",
           alignItems: "center",
@@ -845,58 +848,209 @@ export default function AdminPanel({ onUnauthorised }: Props) {
           top: 0,
           zIndex: 100,
           boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          flexShrink: 0,
         }}
       >
-        <span style={{ color: T.white, fontWeight: 700, fontSize: "16px" }}>
-          🔬 WorkspaceLens — Research Dashboard
+        {/* logo */}
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: "17px",
+            color: T.white,
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          🔬 WorkspaceLens
+          <span
+            style={{
+              fontSize: "10px",
+              fontWeight: 500,
+              background: "rgba(246,201,14,0.2)",
+              border: "1px solid rgba(246,201,14,0.4)",
+              color: T.yellow,
+              padding: "2px 8px",
+              borderRadius: "10px",
+            }}
+          >
+            Admin
+          </span>
         </span>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-          <button
-            onClick={exportCSV}
-            style={{
-              background: T.yellow,
-              border: "none",
-              color: T.green,
-              padding: "6px 14px",
-              borderRadius: "20px",
-              cursor: "pointer",
-              fontSize: "13px",
-              fontWeight: 600,
-            }}
-          >
-            ↓ Export CSV
-          </button>
-          <button
-            onClick={() => token && fetchData(token, page, filter)}
-            style={{
-              background: "rgba(255,255,255,0.1)",
-              border: "none",
-              color: T.white,
-              padding: "6px 14px",
-              borderRadius: "20px",
-              cursor: "pointer",
-              fontSize: "13px",
-            }}
-          >
-            ↻ Refresh
-          </button>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: "none",
-              border: "1px solid rgba(255,255,255,0.3)",
-              color: "#ccc",
-              padding: "6px 14px",
-              borderRadius: "20px",
-              cursor: "pointer",
-              fontSize: "13px",
-            }}
-          >
-            Log out
-          </button>
-        </div>
-      </nav>
 
+        {/* hamburger */}
+        <button
+          onClick={() => setMenuOpen((o) => !o)}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: "8px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "5px",
+          }}
+          aria-label="menu"
+        >
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                display: "block",
+                width: "22px",
+                height: "2px",
+                background: T.white,
+                borderRadius: "2px",
+                transition: "all 0.2s",
+                transform:
+                  menuOpen && i === 0
+                    ? "rotate(45deg) translate(5px, 5px)"
+                    : menuOpen && i === 2
+                      ? "rotate(-45deg) translate(5px, -5px)"
+                      : menuOpen && i === 1
+                        ? "scaleX(0)"
+                        : "none",
+              }}
+            />
+          ))}
+        </button>
+      </nav>
+      {/* ── MOBILE MENU DROPDOWN ── */}
+      {menuOpen && (
+        <>
+          {/* backdrop */}
+          <div
+            onClick={() => setMenuOpen(false)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 98,
+              background: "transparent",
+            }}
+          />
+          <div
+            style={{
+              position: "fixed",
+              top: "56px",
+              left: 0,
+              right: 0,
+              zIndex: 99,
+              background: T.green,
+              borderTop: "1px solid rgba(255,255,255,0.1)",
+              boxShadow: "0 4px 16px rgba(0,0,0,0.3)",
+            }}
+          >
+            {/* stats summary in menu */}
+            {data && (
+              <div
+                style={{
+                  padding: "12px 1.25rem",
+                  borderBottom: "1px solid rgba(255,255,255,0.1)",
+                  display: "flex",
+                  gap: "16px",
+                }}
+              >
+                {[
+                  { icon: "📸", val: data.stats.total, label: "submissions" },
+                  {
+                    icon: "👤",
+                    val: data.stats.participants,
+                    label: "participants",
+                  },
+                  { icon: "🤖", val: data.stats.analysed, label: "analysed" },
+                ].map((s, i) => (
+                  <div key={i} style={{ textAlign: "center" }}>
+                    <div
+                      style={{
+                        fontSize: "15px",
+                        fontWeight: 700,
+                        color: T.yellow,
+                      }}
+                    >
+                      {s.val}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "rgba(255,255,255,0.6)",
+                      }}
+                    >
+                      {s.icon} {s.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* menu actions */}
+            {[
+              {
+                icon: "↓",
+                label: "Export CSV",
+                action: () => {
+                  exportCSV();
+                  setMenuOpen(false);
+                },
+                highlight: true,
+              },
+              {
+                icon: "↻",
+                label: "Refresh data",
+                action: () => {
+                  reload();
+                  setMenuOpen(false);
+                },
+                highlight: false,
+              },
+              {
+                icon: "🚪",
+                label: "Log out",
+                action: () => {
+                  handleLogout();
+                  setMenuOpen(false);
+                },
+                highlight: false,
+                danger: true,
+              },
+            ].map((item, i) => (
+              <button
+                key={i}
+                onClick={item.action}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  width: "100%",
+                  padding: "14px 1.5rem",
+                  background: "none",
+                  border: "none",
+                  borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  color: item.danger
+                    ? "#ff8888"
+                    : item.highlight
+                      ? T.yellow
+                      : "rgba(255,255,255,0.85)",
+                  fontSize: "15px",
+                  textAlign: "left" as const,
+                  cursor: "pointer",
+                  fontWeight: item.highlight ? 600 : 400,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "18px",
+                    width: "24px",
+                    textAlign: "center" as const,
+                  }}
+                >
+                  {item.icon}
+                </span>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "1.5rem" }}>
         {/* error */}
         {error && (
@@ -916,7 +1070,7 @@ export default function AdminPanel({ onUnauthorised }: Props) {
           >
             ⚠ {error}
             <button
-              onClick={() => token && fetchData(token, page, filter)}
+              onClick={reload}
               style={{
                 background: T.error,
                 border: "none",
@@ -937,8 +1091,8 @@ export default function AdminPanel({ onUnauthorised }: Props) {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(4, 1fr)",
-              gap: "12px",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: "10px",
               marginBottom: "1.5rem",
             }}
           >
@@ -992,8 +1146,11 @@ export default function AdminPanel({ onUnauthorised }: Props) {
             display: "flex",
             gap: "8px",
             marginBottom: "1rem",
-            flexWrap: "wrap",
-            alignItems: "center",
+            overflowX: "auto", // scroll on mobile
+            paddingBottom: "4px",
+            WebkitOverflowScrolling: "touch",
+            msOverflowStyle: "none",
+            scrollbarWidth: "none",
           }}
         >
           {["all", "outdoor", "semi-outdoor", "indoor"].map((f) => (

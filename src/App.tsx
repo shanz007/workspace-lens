@@ -288,8 +288,7 @@ export default function App() {
     );
   }
 
-  if (screen === "admin")
-    return <AdminPanel onUnauthorised={() => setScreen("home")} />;
+  if (screen === "admin") return <AdminPanel />;
 
   return null;
 }
