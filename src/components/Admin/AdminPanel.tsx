@@ -369,6 +369,8 @@ function DetailPanel({
   photoUrl?: string;
   onClose: () => void;
 }) {
+  const [showScoreInfo, setShowScoreInfo] = useState(false);
+
   return (
     <>
       {/* backdrop */}
@@ -457,7 +459,6 @@ function DetailPanel({
           ].map(([label, value], i) => (
             <DetailRow key={i} label={label} value={value} />
           ))}
-
           {/* ESM */}
           <SectionTitle>ESM RESPONSES</SectionTitle>
           {[
@@ -468,9 +469,153 @@ function DetailPanel({
           ].map(([label, value], i) => (
             <DetailRow key={i} label={label} value={value} bold />
           ))}
-
           {/* vision analysis */}
-          <SectionTitle>VISION ANALYSIS</SectionTitle>
+          {/* vision analysis header with info icon */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              margin: "1rem 0 8px",
+            }}
+          >
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "11px",
+                fontWeight: 600,
+                color: T.textTertiary,
+                letterSpacing: "0.06em",
+              }}
+            >
+              VISION ANALYSIS
+            </h3>
+            <button
+              onClick={() => setShowScoreInfo((o) => !o)}
+              title="What do these scores mean?"
+              style={{
+                background: showScoreInfo ? T.green : T.grey,
+                border: `1px solid ${showScoreInfo ? T.green : T.border}`,
+                borderRadius: "50%",
+                width: "22px",
+                height: "22px",
+                fontSize: "12px",
+                cursor: "pointer",
+                color: showScoreInfo ? T.white : T.textTertiary,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontWeight: 700,
+                flexShrink: 0,
+                transition: "all 0.15s",
+              }}
+            >
+              i
+            </button>
+          </div>
+          {/* score explanation panel */}
+          {showScoreInfo && (
+            <div
+              style={{
+                background: "#f0f4f0",
+                border: `1px solid ${T.border}`,
+                borderRadius: "10px",
+                padding: "12px 14px",
+                marginBottom: "12px",
+                fontSize: "12px",
+                color: T.textPrimary,
+                lineHeight: 1.7,
+              }}
+            >
+              <p
+                style={{
+                  margin: "0 0 8px",
+                  fontWeight: 600,
+                  color: T.textPrimary,
+                  fontSize: "12px",
+                }}
+              >
+                pOKW2 Vision Analysis — Score Guide
+              </p>
+              {[
+                {
+                  icon: "🌿",
+                  label: "Nature score",
+                  desc: "Proportion of natural elements visible — trees, grass, vegetation, water. 1.0 = fully natural environment.",
+                },
+                {
+                  icon: "🏗️",
+                  label: "Built environment",
+                  desc: "Proportion of built elements — buildings, walls, pavement, furniture. High score = urban/indoor context.",
+                },
+                {
+                  icon: "☁️",
+                  label: "Sky visibility",
+                  desc: "How much open sky is visible in the frame. Key indicator for outdoor vs semi-outdoor classification.",
+                },
+                {
+                  icon: "💡",
+                  label: "Natural light",
+                  desc: "Quality and quantity of natural light reaching the scene. 1.0 = bright, direct natural light.",
+                },
+                {
+                  icon: "🌑",
+                  label: "Shadow presence",
+                  desc: "Presence of shadows indicating direct sunlight. Used as a proxy for sun angle and time of day.",
+                },
+                {
+                  icon: "🌱",
+                  label: "Greenness index",
+                  desc: "Ratio of green vegetation pixels in the image. Quantifies vegetation density independently from nature score.",
+                },
+                {
+                  icon: "🛡️",
+                  label: "Shelter detected",
+                  desc: "Whether an overhead structure is visible — roof, canopy, umbrella, dense tree cover. Key for semi-outdoor classification.",
+                },
+                {
+                  icon: "👥",
+                  label: "People count",
+                  desc: "Number of visible people detected in the photo, excluding any areas the participant has censored.",
+                },
+                {
+                  icon: "🌍",
+                  label: "Environment type",
+                  desc: "Model's classification of the overall environment — outdoor, semi-outdoor, or indoor — based on all visual cues.",
+                },
+              ].map((s, i) => (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    gap: "8px",
+                    marginBottom: "6px",
+                    alignItems: "flex-start",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ flexShrink: 0, fontSize: "14px" }}>
+                    {s.icon}
+                  </span>
+                  <span>
+                    <strong style={{ color: T.textPrimary }}>{s.label}:</strong>{" "}
+                    {s.desc}
+                  </span>
+                </div>
+              ))}
+              <p
+                style={{
+                  margin: "8px 0 0",
+                  fontSize: "11px",
+                  color: T.textTertiary,
+                  fontStyle: "italic",
+                }}
+              >
+                All scores 0.0–1.0 unless noted. Source: pOKW2 model — Herneoja
+                et al. (2023) Frontiers in Psychology.
+              </p>
+            </div>
+          )}{" "}
           {analysis ? (
             <>
               <div
