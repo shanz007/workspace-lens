@@ -18,6 +18,8 @@ export default function HomePage({ onGetStarted }: Props) {
   const [dismissed, setDismissed] = useState(
     () => localStorage.getItem("ios-banner-dismissed") === "true",
   );
+  const [consentChecked, setConsentChecked] = useState(false);
+  const [showConsentWarning, setShowConsentWarning] = useState(false);
 
   const scrollTo = (id: string) => {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
@@ -298,14 +300,14 @@ export default function HomePage({ onGetStarted }: Props) {
           <div style={{ padding: "12px 1.5rem" }}>
             <button
               onClick={() => {
-                onGetStarted();
+                scrollTo("consent");
                 setMenuOpen(false);
               }}
               style={{
                 width: "100%",
                 padding: "13px",
                 background: "#f6c90e",
-                color: "#1a1a2e",
+                color: "#1a2e1a",
                 border: "none",
                 borderRadius: "10px",
                 fontSize: "15px",
@@ -391,7 +393,12 @@ export default function HomePage({ onGetStarted }: Props) {
         </p>
 
         <button
-          onClick={onGetStarted}
+          onClick={() => {
+            document
+              .getElementById("consent")
+              ?.scrollIntoView({ behavior: "smooth" });
+            setMenuOpen(false);
+          }}
           style={{
             display: "block",
             width: "100%",
@@ -399,7 +406,7 @@ export default function HomePage({ onGetStarted }: Props) {
             margin: "0 auto 12px",
             padding: "16px",
             background: "#f6c90e",
-            color: "#1a1a2e",
+            color: "#1a2e1a",
             border: "none",
             borderRadius: "12px",
             fontSize: "16px",
@@ -919,42 +926,95 @@ export default function HomePage({ onGetStarted }: Props) {
               </div>
             </div>
           ))}
-
-          <div
+          {/* consent checkbox */}
+          <label
             style={{
-              background: "#fffbea",
-              border: "1.5px solid #f6c90e",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "12px",
+              padding: "14px 16px",
+              background: consentChecked ? "#f0f9e8" : "#f9f9f9",
+              border: `1.5px solid ${consentChecked ? "#7dc355" : "#ddd"}`,
               borderRadius: "12px",
-              padding: "1rem 1.25rem",
-              margin: "1.5rem 0",
-              fontSize: "13px",
-              color: "#7a5f00",
-              lineHeight: 1.7,
+              margin: "1.25rem 0",
+              cursor: "pointer",
+              transition: "all 0.2s",
             }}
           >
-            <strong>By logging in and submitting photos you confirm</strong>{" "}
-            that you have read and understood the above, consent to your
-            anonymised outdoor workspace photos and survey responses being used
-            for academic research, and take responsibility for censoring any
-            sensitive content before submission.
-          </div>
+            <input
+              type="checkbox"
+              checked={consentChecked}
+              onChange={(e) => {
+                setConsentChecked(e.target.checked);
+                setShowConsentWarning(false);
+              }}
+              style={{
+                width: "22px",
+                height: "22px",
+                marginTop: "1px",
+                cursor: "pointer",
+                accentColor: "#1a2e1a",
+                flexShrink: 0,
+              }}
+            />
+            <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.6 }}>
+              I have read and understood the above. I consent to my anonymised
+              outdoor workspace photos and survey responses being used for
+              academic research, and I take responsibility for censoring any
+              sensitive content before submission.
+            </span>
+          </label>
 
+          {/* warning if they try to proceed without ticking */}
+          {showConsentWarning && (
+            <div
+              style={{
+                background: "#fff0f0",
+                border: "1.5px solid #e53e3e",
+                borderRadius: "10px",
+                padding: "10px 14px",
+                marginBottom: "12px",
+                fontSize: "13px",
+                color: "#c0392b",
+                display: "flex",
+                gap: "8px",
+                alignItems: "center",
+              }}
+            >
+              <span>⚠</span>
+              Please tick the checkbox above to confirm you have read and
+              accepted the consent terms.
+            </div>
+          )}
+
+          {/* login button — disabled until checkbox ticked */}
           <button
-            onClick={onGetStarted}
+            onClick={() => {
+              if (!consentChecked) {
+                setShowConsentWarning(true);
+                return;
+              }
+              onGetStarted();
+            }}
             style={{
               width: "100%",
               padding: "16px",
-              background: "#1a2e1a",
+              background: consentChecked ? "#1a2e1a" : "#ccc",
               color: "#fff",
               border: "none",
               borderRadius: "12px",
               fontSize: "16px",
               fontWeight: 700,
-              cursor: "pointer",
-              boxShadow: "0 4px 16px rgba(26,46,26,0.25)",
+              cursor: consentChecked ? "pointer" : "not-allowed",
+              transition: "background 0.2s",
+              boxShadow: consentChecked
+                ? "0 4px 16px rgba(26,46,26,0.25)"
+                : "none",
             }}
           >
-            🔐 I Understand — Log In
+            {consentChecked
+              ? "🔐 I Understand — Log In"
+              : "🔒 Please accept the consent above"}
           </button>
         </div>
       </div>
