@@ -651,6 +651,7 @@ export default function HomePage({ onGetStarted }: Props) {
                 borderRadius: "12px",
                 border: "1px solid #eee",
                 marginBottom: "10px",
+                textAlign: "left",
               }}
             >
               <div style={{ flex: 1 }}>
@@ -695,7 +696,7 @@ export default function HomePage({ onGetStarted }: Props) {
         id="about"
         style={{ background: "#f0f4f0", padding: "2.5rem 1.25rem" }}
       >
-        <div style={{ maxWidth: "480px", margin: "0 auto" }}>
+        <div style={{ maxWidth: "480px", margin: "0 auto", textAlign: "left" }}>
           <h2
             style={{
               color: "#1a1a2e",
@@ -751,6 +752,7 @@ export default function HomePage({ onGetStarted }: Props) {
                 fontWeight: 600,
                 fontSize: "13px",
                 color: "#1a1a2e",
+                textAlign: "center",
               }}
             >
               ✅ What we collect
@@ -759,7 +761,6 @@ export default function HomePage({ onGetStarted }: Props) {
               "Your gaze-direction photo of the outdoor environment",
               "Survey: location type, thermal comfort, surroundings, activity",
               "Timestamp + Optional GPS (to match with weather and environmental data)",
-              "Optional: approximate GPS location",
               "Anonymous participant ID",
             ].map((t, i) => (
               <div
@@ -770,6 +771,8 @@ export default function HomePage({ onGetStarted }: Props) {
                   marginBottom: "8px",
                   fontSize: "13px",
                   color: "#444",
+                  textAlign: "left",
+                  alignItems: "flex-start",
                 }}
               >
                 <span
@@ -793,6 +796,7 @@ export default function HomePage({ onGetStarted }: Props) {
                   fontWeight: 600,
                   fontSize: "13px",
                   color: "#1a1a2e",
+                  textAlign: "center",
                 }}
               >
                 🚫 What we never collect
@@ -811,6 +815,8 @@ export default function HomePage({ onGetStarted }: Props) {
                     marginBottom: "8px",
                     fontSize: "13px",
                     color: "#444",
+                    textAlign: "left",
+                    alignItems: "flex-start",
                   }}
                 >
                   <span
@@ -841,7 +847,14 @@ export default function HomePage({ onGetStarted }: Props) {
           >
             Consent & Responsibility
           </h2>
-          <p style={{ color: "#999", fontSize: "13px", margin: "0 0 1.5rem" }}>
+          <p
+            style={{
+              color: "#999",
+              fontSize: "13px",
+              margin: "0 0 1.5rem",
+              textAlign: "center",
+            }}
+          >
             Please read carefully before participating.
           </p>
 

@@ -113,7 +113,8 @@ function SubmissionCard({
   const imgRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
 
-  // lazy load — only render image when in viewport
+  const hasAnalysis = !!analysis;
+
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -132,12 +133,19 @@ function SubmissionCard({
         background: T.white,
         borderRadius: "12px",
         overflow: "hidden",
-        border: selected ? `2px solid ${T.green}` : `0.5px solid ${T.border}`,
+        border: selected
+          ? `2px solid ${T.green}`
+          : hasAnalysis
+            ? `0.5px solid ${T.border}`
+            : `0.5px solid ${T.grey}`,
         cursor: "pointer",
-        transition: "box-shadow 0.15s",
+        transition: "box-shadow 0.15s, opacity 0.15s",
         boxShadow: selected
           ? `0 4px 20px rgba(26,46,26,0.25)`
           : "0 2px 8px rgba(0,0,0,0.06)",
+        // dim unanalysed cards
+        opacity: hasAnalysis ? 1 : 0.5,
+        filter: hasAnalysis ? "none" : "grayscale(60%)",
       }}
     >
       {/* photo */}
@@ -170,6 +178,8 @@ function SubmissionCard({
             🖼️
           </div>
         )}
+
+        {/* location badge */}
         <div
           style={{
             position: "absolute",
@@ -185,7 +195,9 @@ function SubmissionCard({
         >
           {sub.location_type}
         </div>
-        {analysis && (
+
+        {/* analysis status badge */}
+        {hasAnalysis ? (
           <div
             style={{
               position: "absolute",
@@ -201,10 +213,40 @@ function SubmissionCard({
           >
             🤖 analysed
           </div>
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              top: "8px",
+              right: "8px",
+              background: "rgba(0,0,0,0.55)",
+              color: "#ddd",
+              fontSize: "10px",
+              fontWeight: 600,
+              padding: "3px 8px",
+              borderRadius: "10px",
+            }}
+          >
+            ⏳ pending
+          </div>
+        )}
+
+        {/* pending overlay — subtle vignette on unanalysed */}
+        {!hasAnalysis && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(255,255,255,0.25)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          />
         )}
       </div>
 
-      {/* body */}
+      {/* card body */}
       <div style={{ padding: "12px" }}>
         <div
           style={{
@@ -239,7 +281,7 @@ function SubmissionCard({
             display: "flex",
             gap: "5px",
             flexWrap: "wrap",
-            marginBottom: analysis ? "8px" : 0,
+            marginBottom: hasAnalysis ? "8px" : 0,
           }}
         >
           {[
@@ -263,18 +305,22 @@ function SubmissionCard({
           ))}
         </div>
 
-        {/* vision score pills */}
-        {analysis && (
+        {/* vision score pills — only if analysed */}
+        {hasAnalysis && (
           <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
             {[
-              { icon: "🌿", val: analysis.nature_score, title: "Nature" },
+              { icon: "🌿", val: analysis!.nature_score, title: "Nature" },
               {
                 icon: "🏗️",
-                val: analysis.built_environment_score,
+                val: analysis!.built_environment_score,
                 title: "Built",
               },
-              { icon: "☁️", val: analysis.sky_visibility, title: "Sky" },
-              { icon: "💡", val: analysis.natural_light_score, title: "Light" },
+              { icon: "☁️", val: analysis!.sky_visibility, title: "Sky" },
+              {
+                icon: "💡",
+                val: analysis!.natural_light_score,
+                title: "Light",
+              },
             ].map((s, i) => (
               <div
                 key={i}
@@ -291,6 +337,20 @@ function SubmissionCard({
               </div>
             ))}
           </div>
+        )}
+
+        {/* pending message */}
+        {!hasAnalysis && (
+          <p
+            style={{
+              margin: 0,
+              fontSize: "11px",
+              color: T.textTertiary,
+              fontStyle: "italic",
+            }}
+          >
+            Vision analysis pending...
+          </p>
         )}
       </div>
     </div>
@@ -720,6 +780,7 @@ export default function AdminPanel() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const reload = () => setReloadKey((k) => k + 1);
+  const [hidePending, setHidePending] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -1185,6 +1246,26 @@ export default function AdminPanel() {
               {data.submissions.length} of {data.total} shown
             </span>
           )}
+          {/* pending toggle */}
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "13px",
+              color: T.textSecondary,
+              cursor: "pointer",
+              marginLeft: "auto",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={hidePending}
+              onChange={(e) => setHidePending(e.target.checked)}
+              style={{ accentColor: T.green, width: "15px", height: "15px" }}
+            />
+            Hide pending analysis
+          </label>
         </div>
 
         {/* loading */}
@@ -1202,80 +1283,97 @@ export default function AdminPanel() {
         )}
 
         {/* gallery grid */}
+        {/* gallery grid */}
         {data && !loading && (
           <>
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                gap: "16px",
-                marginBottom: "1.5rem",
-              }}
-            >
-              {data.submissions.map((sub) => (
-                <SubmissionCard
-                  key={sub.id}
-                  sub={sub}
-                  analysis={data.analyses[sub.photo_path]}
-                  photoUrl={data.signedUrls[sub.photo_path]}
-                  selected={selected?.id === sub.id}
-                  onClick={() => setSelected(sub)}
-                />
-              ))}
-            </div>
+            {/* compute filtered list here — right before the grid */}
+            {(() => {
+              const displayedSubmissions = hidePending
+                ? data.submissions.filter((s) => !!data.analyses[s.photo_path])
+                : data.submissions;
 
-            {/* pagination */}
-            {data.total > 20 && (
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "center",
-                  gap: "8px",
-                }}
-              >
-                <button
-                  onClick={() => setPage((p) => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                  style={{
-                    padding: "8px 20px",
-                    borderRadius: "8px",
-                    border: `1px solid ${T.border}`,
-                    background: T.white,
-                    cursor: page === 0 ? "not-allowed" : "pointer",
-                    color: page === 0 ? "#ccc" : T.textSecondary,
-                    fontSize: "13px",
-                  }}
-                >
-                  ← Previous
-                </button>
-                <span
-                  style={{
-                    alignSelf: "center",
-                    fontSize: "13px",
-                    color: T.textTertiary,
-                  }}
-                >
-                  Page {page + 1} of {Math.ceil(data.total / 20)}
-                </span>
-                <button
-                  onClick={() => setPage((p) => p + 1)}
-                  disabled={(page + 1) * 20 >= data.total}
-                  style={{
-                    padding: "8px 20px",
-                    borderRadius: "8px",
-                    border: `1px solid ${T.border}`,
-                    background: T.white,
-                    cursor:
-                      (page + 1) * 20 >= data.total ? "not-allowed" : "pointer",
-                    color:
-                      (page + 1) * 20 >= data.total ? "#ccc" : T.textSecondary,
-                    fontSize: "13px",
-                  }}
-                >
-                  Next →
-                </button>
-              </div>
-            )}
+              return (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fill, minmax(280px, 1fr))",
+                      gap: "16px",
+                      marginBottom: "1.5rem",
+                    }}
+                  >
+                    {displayedSubmissions.map((sub) => (
+                      <SubmissionCard
+                        key={sub.id}
+                        sub={sub}
+                        analysis={data.analyses[sub.photo_path]}
+                        photoUrl={data.signedUrls[sub.photo_path]}
+                        selected={selected?.id === sub.id}
+                        onClick={() => setSelected(sub)}
+                      />
+                    ))}
+                  </div>
+
+                  {/* pagination */}
+                  {data.total > 20 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        gap: "8px",
+                      }}
+                    >
+                      <button
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        style={{
+                          padding: "8px 20px",
+                          borderRadius: "8px",
+                          border: `1px solid ${T.border}`,
+                          background: T.white,
+                          cursor: page === 0 ? "not-allowed" : "pointer",
+                          color: page === 0 ? "#ccc" : T.textSecondary,
+                          fontSize: "13px",
+                        }}
+                      >
+                        ← Previous
+                      </button>
+                      <span
+                        style={{
+                          alignSelf: "center",
+                          fontSize: "13px",
+                          color: T.textTertiary,
+                        }}
+                      >
+                        Page {page + 1} of {Math.ceil(data.total / 20)}
+                      </span>
+                      <button
+                        onClick={() => setPage((p) => p + 1)}
+                        disabled={(page + 1) * 20 >= data.total}
+                        style={{
+                          padding: "8px 20px",
+                          borderRadius: "8px",
+                          border: `1px solid ${T.border}`,
+                          background: T.white,
+                          cursor:
+                            (page + 1) * 20 >= data.total
+                              ? "not-allowed"
+                              : "pointer",
+                          color:
+                            (page + 1) * 20 >= data.total
+                              ? "#ccc"
+                              : T.textSecondary,
+                          fontSize: "13px",
+                        }}
+                      >
+                        Next →
+                      </button>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
 
