@@ -503,7 +503,7 @@ export default function PrivacyEditor({
               fontWeight: 500,
             }}
           >
-            ↩ Retake
+            📷 Retake
           </button>
 
           <button
@@ -520,7 +520,7 @@ export default function PrivacyEditor({
               fontWeight: 500,
             }}
           >
-            {confirming ? "✕ Cancel" : "✕ Clear"}
+            {confirming ? "✕ Cancel" : "🗑️ Clear"}
           </button>
 
           <button
