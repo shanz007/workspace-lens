@@ -527,6 +527,7 @@ export default function HomePage({ onGetStarted }: Props) {
               padding: "1rem 1.25rem",
               marginBottom: "1rem",
               border: "1px solid #eee",
+              textAlign: "left",
             }}
           >
             <p
@@ -535,6 +536,7 @@ export default function HomePage({ onGetStarted }: Props) {
                 fontWeight: 600,
                 fontSize: "13px",
                 color: "#1a1a2e",
+                textAlign: "left",
               }}
             >
               ✅ Good photo subjects
@@ -573,6 +575,7 @@ export default function HomePage({ onGetStarted }: Props) {
               padding: "1rem 1.25rem",
               marginBottom: "1.5rem",
               border: "1px solid #f5c0c0",
+              textAlign: "left",
             }}
           >
             <p
@@ -581,6 +584,7 @@ export default function HomePage({ onGetStarted }: Props) {
                 fontWeight: 600,
                 fontSize: "13px",
                 color: "#1a1a2e",
+                textAlign: "left",
               }}
             >
               ❌ Please avoid
@@ -613,7 +617,12 @@ export default function HomePage({ onGetStarted }: Props) {
 
           {/* Steps */}
           <h3
-            style={{ color: "#1a1a2e", fontSize: "14px", margin: "0 0 1rem" }}
+            style={{
+              color: "#1a1a2e",
+              fontSize: "14px",
+              margin: "0 0 1rem",
+              textAlign: "left",
+            }}
           >
             How it works — step by step
           </h3>
@@ -759,7 +768,7 @@ export default function HomePage({ onGetStarted }: Props) {
                 fontWeight: 600,
                 fontSize: "13px",
                 color: "#1a1a2e",
-                textAlign: "center",
+                textAlign: "left",
               }}
             >
               ✅ What we collect
@@ -803,7 +812,7 @@ export default function HomePage({ onGetStarted }: Props) {
                   fontWeight: 600,
                   fontSize: "13px",
                   color: "#1a1a2e",
-                  textAlign: "center",
+                  textAlign: "left",
                 }}
               >
                 🚫 What we never collect
@@ -844,7 +853,7 @@ export default function HomePage({ onGetStarted }: Props) {
         id="consent"
         style={{ background: "#fff", padding: "2.5rem 1.25rem" }}
       >
-        <div style={{ maxWidth: "480px", margin: "0 auto" }}>
+        <div style={{ maxWidth: "480px", margin: "0 auto", textAlign: "left" }}>
           <h2
             style={{
               color: "#1a1a2e",
@@ -859,7 +868,7 @@ export default function HomePage({ onGetStarted }: Props) {
               color: "#999",
               fontSize: "13px",
               margin: "0 0 1.5rem",
-              textAlign: "center",
+              textAlign: "left",
             }}
           >
             Please read carefully before participating.
@@ -955,6 +964,7 @@ export default function HomePage({ onGetStarted }: Props) {
                 cursor: "pointer",
                 accentColor: "#1a2e1a",
                 flexShrink: 0,
+                textAlign: "left",
               }}
             />
             <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.6 }}>

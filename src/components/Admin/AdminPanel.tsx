@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { supabase } from "../../lib/supabase";
 
 interface Submission {
   id: string;
@@ -103,12 +104,16 @@ function SubmissionCard({
   photoUrl,
   selected,
   onClick,
+  onDelete,
+  onFullscreen,
 }: {
   sub: Submission;
   analysis?: Analysis;
   photoUrl?: string;
   selected: boolean;
   onClick: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+  onFullscreen: (e: React.MouseEvent) => void;
 }) {
   const imgRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
@@ -230,6 +235,57 @@ function SubmissionCard({
             ⏳ pending
           </div>
         )}
+        {/* action buttons — top right of photo on hover */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: "8px",
+            right: "8px",
+            display: "flex",
+            gap: "4px",
+          }}
+        >
+          {/* fullscreen */}
+          <button
+            onClick={onFullscreen}
+            title="View fullscreen"
+            style={{
+              background: "rgba(0,0,0,0.6)",
+              border: "none",
+              borderRadius: "6px",
+              width: "28px",
+              height: "28px",
+              cursor: "pointer",
+              color: "#fff",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            ⛶
+          </button>
+          {/* delete */}
+          <button
+            onClick={onDelete}
+            title="Delete submission"
+            style={{
+              background: "rgba(192,57,43,0.85)",
+              border: "none",
+              borderRadius: "6px",
+              width: "28px",
+              height: "28px",
+              cursor: "pointer",
+              color: "#fff",
+              fontSize: "13px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            🗑
+          </button>
+        </div>
 
         {/* pending overlay — subtle vignette on unanalysed */}
         {!hasAnalysis && (
@@ -370,7 +426,6 @@ function DetailPanel({
   onClose: () => void;
 }) {
   const [showScoreInfo, setShowScoreInfo] = useState(false);
-
   return (
     <>
       {/* backdrop */}
@@ -591,7 +646,6 @@ function DetailPanel({
                     gap: "8px",
                     marginBottom: "6px",
                     alignItems: "flex-start",
-                    textAlign: "left",
                   }}
                 >
                   <span style={{ flexShrink: 0, fontSize: "14px" }}>
@@ -926,7 +980,9 @@ export default function AdminPanel() {
   const [reloadKey, setReloadKey] = useState(0);
   const reload = () => setReloadKey((k) => k + 1);
   const [hidePending, setHidePending] = useState(false);
-
+  const [deleteTarget, setDeleteTarget] = useState<Submission | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [fullscreenUrl, setFullscreenUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!token) return;
 
@@ -984,6 +1040,53 @@ export default function AdminPanel() {
       cancelled = true;
     };
   }, [token, page, filter, reloadKey]);
+
+  const handleDelete = async () => {
+    if (!deleteTarget || !token) return;
+    setDeleting(true);
+    try {
+      // delete from storage
+      const { error: storageError } = await supabase.storage
+        .from("workspace-photos")
+        .remove([deleteTarget.photo_path]);
+      if (storageError) throw storageError;
+
+      // delete from submissions table
+      const { error: dbError } = await supabase
+        .from("submissions")
+        .delete()
+        .eq("photo_path", deleteTarget.photo_path);
+      if (dbError) throw dbError;
+
+      // delete from photo_analysis if exists
+      await supabase
+        .from("photo_analysis")
+        .delete()
+        .eq("photo_path", deleteTarget.photo_path);
+
+      // remove from local state immediately
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              submissions: prev.submissions.filter(
+                (s) => s.photo_path !== deleteTarget.photo_path,
+              ),
+              stats: { ...prev.stats, total: prev.stats.total - 1 },
+            }
+          : null,
+      );
+
+      // close detail panel if deleted item was selected
+      if (selected?.photo_path === deleteTarget.photo_path) setSelected(null);
+      setDeleteTarget(null);
+      console.log("✅ Deleted:", deleteTarget.photo_path);
+    } catch (err) {
+      setError(`Delete failed: ${(err as Error).message}`);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const handleLogout = () => {
     sessionStorage.removeItem("adminJWT");
@@ -1456,6 +1559,15 @@ export default function AdminPanel() {
                         photoUrl={data.signedUrls[sub.photo_path]}
                         selected={selected?.id === sub.id}
                         onClick={() => setSelected(sub)}
+                        onDelete={(e) => {
+                          e.stopPropagation(); // don't open detail panel
+                          setDeleteTarget(sub);
+                        }}
+                        onFullscreen={(e) => {
+                          e.stopPropagation();
+                          const url = data.signedUrls[sub.photo_path];
+                          if (url) setFullscreenUrl(url);
+                        }}
                       />
                     ))}
                   </div>
@@ -1532,6 +1644,197 @@ export default function AdminPanel() {
           />
         )}
       </div>
+
+      {/* ── DELETE CONFIRMATION MODAL ── */}
+      {deleteTarget && (
+        <>
+          <div
+            onClick={() => !deleting && setDeleteTarget(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.6)",
+              zIndex: 300,
+            }}
+          />
+          <div
+            style={{
+              position: "fixed",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              zIndex: 301,
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "2rem",
+              width: "min(380px, 90vw)",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.3)",
+              fontFamily:
+                '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+            }}
+          >
+            <div
+              style={{
+                fontSize: "36px",
+                textAlign: "center",
+                marginBottom: "12px",
+              }}
+            >
+              🗑️
+            </div>
+            <h3
+              style={{
+                margin: "0 0 8px",
+                color: T.textPrimary,
+                textAlign: "center",
+                fontSize: "17px",
+              }}
+            >
+              Delete submission?
+            </h3>
+            <p
+              style={{
+                margin: "0 0 6px",
+                fontSize: "13px",
+                color: T.textSecondary,
+                textAlign: "center",
+              }}
+            >
+              Participant:{" "}
+              <strong style={{ fontFamily: "monospace" }}>
+                {deleteTarget.participant_id}
+              </strong>
+            </p>
+            <p
+              style={{
+                margin: "0 0 20px",
+                fontSize: "12px",
+                color: T.textTertiary,
+                textAlign: "center",
+                lineHeight: 1.5,
+              }}
+            >
+              This will permanently delete the photo, ESM responses, and vision
+              analysis from storage and database. This cannot be undone.
+            </p>
+
+            {/* preview thumbnail */}
+            {data?.signedUrls[deleteTarget.photo_path] && (
+              <img
+                src={data.signedUrls[deleteTarget.photo_path]}
+                alt="to delete"
+                style={{
+                  width: "100%",
+                  height: "120px",
+                  objectFit: "cover",
+                  borderRadius: "8px",
+                  marginBottom: "20px",
+                  border: `2px solid ${T.green}`,
+                }}
+              />
+            )}
+
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  border: `1px solid ${T.border}`,
+                  borderRadius: "10px",
+                  background: "#fff",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  color: T.textSecondary,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{
+                  flex: 1,
+                  padding: "12px",
+                  border: "none",
+                  borderRadius: "10px",
+                  background: deleting ? "#ccc" : T.green,
+                  color: "#fff",
+                  cursor: deleting ? "not-allowed" : "pointer",
+                  fontSize: "14px",
+                  fontWeight: 700,
+                }}
+              >
+                {deleting ? "Deleting..." : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── FULLSCREEN VIEW ── */}
+      {fullscreenUrl && (
+        <>
+          <div
+            onClick={() => setFullscreenUrl(null)}
+            style={{
+              position: "fixed",
+              inset: 0,
+              background: "rgba(0,0,0,0.92)",
+              zIndex: 300,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "zoom-out",
+            }}
+          >
+            <img
+              src={fullscreenUrl}
+              alt="fullscreen"
+              style={{
+                maxWidth: "95vw",
+                maxHeight: "95vh",
+                objectFit: "contain",
+                borderRadius: "8px",
+                boxShadow: "0 8px 48px rgba(0,0,0,0.6)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <button
+              onClick={() => setFullscreenUrl(null)}
+              style={{
+                position: "fixed",
+                top: "16px",
+                right: "16px",
+                background: "rgba(255,255,255,0.15)",
+                border: "1px solid rgba(255,255,255,0.3)",
+                borderRadius: "50%",
+                width: "40px",
+                height: "40px",
+                color: "#fff",
+                fontSize: "20px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ✕
+            </button>
+            <p
+              style={{
+                position: "fixed",
+                bottom: "16px",
+                color: "rgba(255,255,255,0.5)",
+                fontSize: "12px",
+              }}
+            >
+              Click anywhere to close
+            </p>
+          </div>
+        </>
+      )}
     </div>
   );
 }
