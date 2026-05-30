@@ -42,6 +42,7 @@ export default function App() {
     null,
   );
   const censoredBlobRef = useRef<Blob | null>(null);
+  const gpsConsentRef = useRef<boolean>(false);
 
   useEffect(() => {
     retryQueue();
@@ -77,6 +78,7 @@ export default function App() {
       censored,
       participantId,
       responses ?? undefined,
+      gpsConsentRef.current,
     );
     if (result.success) {
       log(`✓ Uploaded to: ${result.path}`);
@@ -131,8 +133,9 @@ export default function App() {
         <PrivacyEditor
           imageBlob={capturedBlob}
           participantId={participantId}
-          onConfirm={(censored) => {
+          onConfirm={(censored, includeGPS) => {
             censoredBlobRef.current = censored; // ← store immediately, no async delay
+            gpsConsentRef.current = includeGPS; // store GPS preference
             setScreen("questionnaire"); // go to survey before uploading
           }}
           onRetake={handleRetake}

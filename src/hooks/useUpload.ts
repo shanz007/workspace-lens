@@ -124,6 +124,7 @@ export function useUpload() {
     blob: Blob,
     participantId: string,
     responses?: QuestionnaireResponses,
+    includeGPS: boolean = false, // ← new param, defaults to false
   ): Promise<UploadResult> => {
     // fresh timestamp per upload — supports multiple submissions from same participant
     const now = new Date();
@@ -139,15 +140,17 @@ export function useUpload() {
       supabase.storage
         .from("workspace-photos")
         .upload(photoPath, blob, { contentType: "image/jpeg", upsert: false }),
-      getGPS(),
+      includeGPS ? getGPS() : Promise.resolve(null), //  gps conditional based
     ]);
 
-    if (gps) {
+    if (includeGPS && gps) {
       console.log(
         `📍 GPS: ${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)} (±${gps.accuracy.toFixed(0)}m)`,
       );
+    } else if (includeGPS && !gps) {
+      console.log("📍 GPS requested but unavailable");
     } else {
-      console.log("📍 GPS not available");
+      console.log("📍 GPS not requested by participant");
     }
 
     // ── handle photo upload failure ───────────────────────────────────────────

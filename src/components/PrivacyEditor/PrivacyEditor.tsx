@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 interface Props {
   imageBlob: Blob;
   participantId: string;
-  onConfirm: (censored: Blob) => void;
+  onConfirm: (censored: Blob, includeGPS: boolean) => void;
   onRetake: () => void;
   onLogout: () => void;
 }
@@ -30,6 +30,7 @@ export default function PrivacyEditor({
   const [confirming, setConfirming] = useState(false);
   const [validationError, setValidationError] = useState("");
   const [showLogout, setShowLogout] = useState(false);
+  const [includeGPS, setIncludeGPS] = useState(false);
 
   const [fileSizeError] = useState<string>(() => {
     const sizeKB = imageBlob.size / 1024;
@@ -130,10 +131,11 @@ export default function PrivacyEditor({
       setValidationError("");
       return;
     }
+    // All conditions met — export and upload
     canvasRef.current!.toBlob(
       (blob) => {
-        if (blob) onConfirm(blob);
-      },
+        if (blob) onConfirm(blob, includeGPS);
+      }, // ← pass includeGPS
       "image/jpeg",
       0.92,
     );
@@ -444,6 +446,52 @@ export default function PrivacyEditor({
             />
             <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.5 }}>
               I have reviewed the image and am happy to submit it.
+            </span>
+          </label>
+        )}
+        {/* GPS consent checkbox — shown alongside review checkbox */}
+        {actionCount >= 0 && (
+          <label
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "10px",
+              marginBottom: "10px",
+              cursor: "pointer",
+              padding: "10px 12px",
+              background: includeGPS ? "#f0f4ff" : "#f9f9f9",
+              borderRadius: "10px",
+              border: `1.5px solid ${includeGPS ? "#4a7adb" : "#ddd"}`,
+              transition: "all 0.2s",
+              textAlign: "left",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={includeGPS}
+              onChange={(e) => setIncludeGPS(e.target.checked)}
+              style={{
+                width: "20px",
+                height: "20px",
+                cursor: "pointer",
+                flexShrink: 0,
+                accentColor: "#4a7adb",
+                marginTop: "1px",
+              }}
+            />
+            <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.5 }}>
+              Include my approximate GPS location with this submission
+              <span
+                style={{
+                  display: "block",
+                  fontSize: "11px",
+                  color: "#888",
+                  marginTop: "2px",
+                }}
+              >
+                Optional — helps researchers map outdoor workspace locations.
+                You can leave this unticked.
+              </span>
             </span>
           </label>
         )}
