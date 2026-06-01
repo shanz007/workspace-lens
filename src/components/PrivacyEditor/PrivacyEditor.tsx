@@ -31,6 +31,10 @@ export default function PrivacyEditor({
   const [validationError, setValidationError] = useState("");
   const [showLogout, setShowLogout] = useState(false);
   const [includeGPS, setIncludeGPS] = useState(false);
+  const historyRef = useRef<ImageData[]>([]);
+  const redoRef = useRef<ImageData[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   const [fileSizeError] = useState<string>(() => {
     const sizeKB = imageBlob.size / 1024;
@@ -38,6 +42,49 @@ export default function PrivacyEditor({
       ? `This photo appears too small (${sizeKB.toFixed(0)} KB). Please retake with a real workspace photo.`
       : "";
   });
+
+  const saveHistory = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    historyRef.current.push(
+      ctx.getImageData(0, 0, canvas.width, canvas.height),
+    );
+    redoRef.current = [];
+    if (historyRef.current.length > 20) historyRef.current.shift();
+    setCanUndo(true);
+    setCanRedo(false);
+  };
+
+  const undo = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || historyRef.current.length === 0) return;
+    const ctx = canvas.getContext("2d")!;
+    redoRef.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    const prev = historyRef.current.pop()!;
+    ctx.putImageData(prev, 0, 0);
+    setActionCount((c) => Math.max(0, c - 1));
+    setConfirming(false);
+    setValidationError("");
+    setCanUndo(historyRef.current.length > 0);
+    setCanRedo(true);
+  };
+
+  const redo = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || redoRef.current.length === 0) return;
+    const ctx = canvas.getContext("2d")!;
+    historyRef.current.push(
+      ctx.getImageData(0, 0, canvas.width, canvas.height),
+    );
+    const next = redoRef.current.pop()!;
+    ctx.putImageData(next, 0, 0);
+    setActionCount((c) => c + 1);
+    setConfirming(false);
+    setCanUndo(true);
+    setCanRedo(redoRef.current.length > 0);
+  };
+
   useEffect(() => {
     const url = URL.createObjectURL(imageBlob);
     imageRef.current.onload = () => {
@@ -50,6 +97,23 @@ export default function PrivacyEditor({
     return () => URL.revokeObjectURL(url);
   }, [imageBlob]);
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const isMac = navigator.platform.includes("Mac");
+      const ctrl = isMac ? e.metaKey : e.ctrlKey;
+      if (ctrl && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      }
+      if (ctrl && (e.key === "y" || (e.key === "z" && e.shiftKey))) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
+
   const getPos = (e: React.PointerEvent) => {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
@@ -60,6 +124,7 @@ export default function PrivacyEditor({
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    saveHistory();
     drawingRef.current = true;
     startRef.current = getPos(e);
     setConfirming(false);
@@ -113,6 +178,10 @@ export default function PrivacyEditor({
     setReviewed(false);
     setConfirming(false);
     setValidationError("");
+    historyRef.current = [];
+    redoRef.current = [];
+    setCanUndo(false);
+    setCanRedo(false);
   };
 
   const handleUploadTap = () => {
@@ -300,26 +369,10 @@ export default function PrivacyEditor({
           flexShrink: 0,
         }}
       >
-        {/* File size error */}
-        {fileSizeError && (
-          <div
-            style={{
-              background: "#fff0f0",
-              border: "1.5px solid #e53e3e",
-              borderRadius: "8px",
-              padding: "8px 12px",
-              fontSize: "13px",
-              color: "#c0392b",
-              marginBottom: "8px",
-            }}
-          >
-            ❌ {fileSizeError}
-          </div>
-        )}
-
-        {/* Tool selector + status */}
+        {/* Tool selector + undo/redo */}
         {!fileSizeError && (
-          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: "6px", marginBottom: "0.5rem" }}>
+            {/* tool buttons */}
             <button
               onClick={() => setTool("blackbox")}
               style={{
@@ -353,24 +406,91 @@ export default function PrivacyEditor({
               🌫 Blur
             </button>
 
-            {/* Action count badge */}
-            {actionCount >= 0 && (
-              <div
-                style={{
-                  background: "#e1f5ee",
-                  border: "1px solid #7dc355",
-                  borderRadius: "20px",
-                  padding: "4px 10px",
-                  fontSize: "12px",
-                  fontWeight: 600,
-                  color: "#1a5c2a",
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-              >
-                ✓ {actionCount} area{actionCount > 1 ? "s" : ""}
-              </div>
-            )}
+            {/* divider */}
+            <div
+              style={{ width: "1px", background: "#ddd", margin: "4px 0" }}
+            />
+
+            {/* undo */}
+            <button
+              onClick={undo}
+              disabled={!canUndo}
+              title="Undo (Ctrl+Z)"
+              style={{
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1.5px solid #ddd",
+                background: !canUndo ? "#f5f5f5" : "#fff",
+                color: !canUndo ? "#ccc" : "#333",
+                cursor: !canUndo ? "not-allowed" : "pointer",
+                fontSize: "15px",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: "38px",
+              }}
+            >
+              ↩
+            </button>
+
+            {/* redo */}
+            <button
+              onClick={redo}
+              disabled={!canRedo}
+              title="Redo (Ctrl+Y)"
+              style={{
+                padding: "8px 12px",
+                borderRadius: "8px",
+                border: "1.5px solid #ddd",
+                background: !canRedo ? "#f5f5f5" : "#fff",
+                color: !canRedo ? "#ccc" : "#333",
+                cursor: !canRedo ? "not-allowed" : "pointer",
+                fontSize: "15px",
+                fontWeight: 600,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: "38px",
+              }}
+            >
+              ↪
+            </button>
+          </div>
+        )}
+        {/* File size error */}
+        {fileSizeError && (
+          <div
+            style={{
+              background: "#fff0f0",
+              border: "1.5px solid #e53e3e",
+              borderRadius: "8px",
+              padding: "8px 12px",
+              fontSize: "13px",
+              color: "#c0392b",
+              marginBottom: "8px",
+            }}
+          >
+            ❌ {fileSizeError}
+          </div>
+        )}
+
+        {/* Action count badge */}
+        {actionCount >= 0 && (
+          <div
+            style={{
+              background: "#e1f5ee",
+              border: "1px solid #7dc355",
+              borderRadius: "20px",
+              padding: "4px 10px",
+              fontSize: "12px",
+              fontWeight: 600,
+              color: "#1a5c2a",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            ✓ {actionCount} area{actionCount > 1 ? "s" : ""}
           </div>
         )}
 
@@ -386,6 +506,12 @@ export default function PrivacyEditor({
           {tool === "blackbox"
             ? "⬛ Drag to draw black boxes over faces, screens, or names to mask."
             : "🌫 Drag to pixelate sensitive areas."}
+          {canUndo && (
+            <span style={{ color: "#1a2e1a", fontWeight: 500 }}>
+              {" "}
+              · Ctrl+Z to undo
+            </span>
+          )}
         </p>
       </div>
 
