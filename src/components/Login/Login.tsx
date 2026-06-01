@@ -1,84 +1,117 @@
-import { supabase } from "../../lib/supabase";
 import { useState } from "react";
+import { supabase } from "../../lib/supabase";
 
 interface Props {
   onLogin: (id: string) => void;
   onBack: () => void;
 }
 
+// sanitise input — strip anything that could be harmful
+const sanitiseId = (raw: string): string => {
+  return raw
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, "") // only alphanumeric, dash, underscore
+    .slice(0, 20); // max 20 chars
+};
+
+const isValidId = (id: string): boolean =>
+  /^[A-Z0-9][A-Z0-9_-]{1,19}$/.test(id);
+
 export default function Login({ onLogin, onBack }: Props) {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
-
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState<"new" | "returning">("new");
 
   const handleSubmit = async () => {
-    const trimmed = value.trim().toUpperCase();
+    const id = sanitiseId(value);
 
-    if (!trimmed) {
-      setError("Please enter your participant ID");
+    if (!id) {
+      setError("Please enter a participant ID");
+      return;
+    }
+
+    if (!isValidId(id)) {
+      setError("ID must be 2–20 characters, letters and numbers only");
       return;
     }
 
     setLoading(true);
     setError("");
 
-    // check if already validated previously — allow offline login
-    const cachedIds = JSON.parse(localStorage.getItem("validatedIds") || "[]");
-    if (cachedIds.includes(trimmed)) {
-      localStorage.setItem("participantId", trimmed);
-      setLoading(false);
-      onLogin(trimmed);
-      return;
-    }
-
     try {
-      // validate against Supabase participants table
-      const { data, error: dbError } = await supabase
+      // check if ID already exists
+      const { data: existing, error: checkError } = await supabase
         .from("participants")
         .select("participant_id, active")
-        .eq("participant_id", trimmed)
-        .single();
+        .eq("participant_id", id)
+        .maybeSingle();
 
-      setLoading(false);
+      if (checkError) throw checkError;
 
-      if (dbError || !data) {
-        setError(
-          "ID not recognised. Please check your invitation email and try again.",
-        );
-        setLoading(false);
-        return;
+      if (mode === "new") {
+        if (existing) {
+          setError(
+            'This ID is already taken — please choose a different one, or switch to "Returning participant"',
+          );
+          setLoading(false);
+          return;
+        }
+
+        // create new entry
+        const { error: insertError } = await supabase
+          .from("participants")
+          .insert({
+            participant_id: id,
+            active: true,
+            self_registered: true,
+          });
+
+        if (insertError) throw insertError;
+
+        console.log("✅ New participant registered:", id);
+      } else {
+        // returning — just check it exists and is active
+        if (!existing) {
+          setError(
+            'ID not found. Have you participated before? If you are new, switch to "New participant"',
+          );
+          setLoading(false);
+          return;
+        }
+        if (!existing.active) {
+          setError("This participant ID is no longer active.");
+          setLoading(false);
+          return;
+        }
+
+        console.log("✅ Returning participant:", id);
       }
 
-      if (!data.active) {
-        setError(
-          "This participant ID is no longer active. Please contact the research team.",
-        );
-        setLoading(false);
-        return;
+      // cache for offline use
+      const cached = JSON.parse(localStorage.getItem("validatedIds") || "[]");
+      if (!cached.includes(id)) {
+        localStorage.setItem("validatedIds", JSON.stringify([...cached, id]));
       }
 
-      //cache the validated ID for offline use
-      const updated = [...cachedIds, trimmed];
-      localStorage.setItem("validatedIds", JSON.stringify(updated));
-    } catch {
-      // network unavailable — check if we've seen this ID before
-      if (cachedIds.includes(trimmed)) {
-        localStorage.setItem("participantId", trimmed);
-        setLoading(false);
-        onLogin(trimmed);
+      localStorage.setItem("participantId", id);
+      onLogin(id);
+    } catch (err) {
+      const e = err as Error;
+      // offline fallback
+      const cached = JSON.parse(localStorage.getItem("validatedIds") || "[]");
+      if (cached.includes(id)) {
+        localStorage.setItem("participantId", id);
+        onLogin(id);
         return;
       }
       setError(
-        "No internet connection. Please connect to validate your ID for the first time.",
+        `Connection error — please check your internet and try again. (${e.message})`,
       );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    localStorage.setItem("participantId", trimmed);
-    setLoading(false);
-    onLogin(trimmed);
   };
 
   return (
@@ -92,7 +125,7 @@ export default function Login({ onLogin, onBack }: Props) {
         flexDirection: "column",
       }}
     >
-      {/* ── NAVBAR ── */}
+      {/* navbar */}
       <nav
         style={{
           display: "flex",
@@ -123,7 +156,6 @@ export default function Login({ onLogin, onBack }: Props) {
         </button>
       </nav>
 
-      {/* ── MAIN CARD ── */}
       <div
         style={{
           flex: 1,
@@ -134,7 +166,7 @@ export default function Login({ onLogin, onBack }: Props) {
           padding: "2rem 1.25rem",
         }}
       >
-        {/* Icon */}
+        {/* icon */}
         <div
           style={{
             width: "72px",
@@ -161,23 +193,61 @@ export default function Login({ onLogin, onBack }: Props) {
             textAlign: "center",
           }}
         >
-          Participant Login
+          {mode === "new" ? "Create your ID" : "Welcome back"}
         </h1>
         <p
           style={{
             color: "#aab4be",
             fontSize: "14px",
             textAlign: "center",
-            margin: "0 0 2rem",
-            maxWidth: "280px",
+            margin: "0 0 1.5rem",
+            maxWidth: "300px",
             lineHeight: 1.6,
           }}
         >
-          Enter the participant ID sent to you by the research team in your
-          invitation email.
+          {mode === "new"
+            ? "Choose a unique participant ID — you'll use this every time you submit a photo."
+            : "Enter your existing participant ID to continue."}
         </p>
 
-        {/* Card */}
+        {/* mode toggle */}
+        <div
+          style={{
+            display: "flex",
+            background: "rgba(255,255,255,0.1)",
+            borderRadius: "10px",
+            padding: "3px",
+            marginBottom: "1.5rem",
+            width: "100%",
+            maxWidth: "380px",
+          }}
+        >
+          {(["new", "returning"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => {
+                setMode(m);
+                setError("");
+              }}
+              style={{
+                flex: 1,
+                padding: "9px",
+                borderRadius: "8px",
+                border: "none",
+                background: mode === m ? "#fff" : "transparent",
+                color: mode === m ? "#1a2e1a" : "rgba(255,255,255,0.7)",
+                fontWeight: mode === m ? 700 : 400,
+                cursor: "pointer",
+                fontSize: "13px",
+                transition: "all 0.2s",
+              }}
+            >
+              {m === "new" ? "🆕 New participant" : "↩ Returning"}
+            </button>
+          ))}
+        </div>
+
+        {/* card */}
         <div
           style={{
             width: "100%",
@@ -198,18 +268,22 @@ export default function Login({ onLogin, onBack }: Props) {
               marginBottom: "8px",
             }}
           >
-            PARTICIPANT ID
+            {mode === "new" ? "CHOOSE A PARTICIPANT ID" : "YOUR PARTICIPANT ID"}
           </label>
 
           <input
             type="text"
-            placeholder="e.g. P007"
+            placeholder={
+              mode === "new" ? "e.g. OUTDOOR42 or JANE2025" : "e.g. OUTDOOR42"
+            }
             value={value}
             autoFocus
             autoCapitalize="characters"
             autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
             onChange={(e) => {
-              setValue(e.target.value);
+              setValue(sanitiseId(e.target.value));
               setError("");
             }}
             onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
@@ -223,64 +297,86 @@ export default function Login({ onLogin, onBack }: Props) {
               border: error ? "2px solid #e53e3e" : "2px solid #e0e0e0",
               outline: "none",
               marginBottom: "8px",
-              boxSizing: "border-box",
+              boxSizing: "border-box" as const,
               fontFamily: "monospace",
-              color: "#1a1a2e",
+              color: "#1a2e1a",
               background: "#f9f9f9",
               textTransform: "uppercase",
             }}
           />
 
+          {/* live sanitised preview */}
+          {value && (
+            <p style={{ fontSize: "11px", color: "#888", margin: "0 0 8px" }}>
+              Will be stored as:{" "}
+              <strong style={{ fontFamily: "monospace", color: "#1a2e1a" }}>
+                {value}
+              </strong>
+            </p>
+          )}
+
           {error && (
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                color: "#e53e3e",
+                background: "#fff0f0",
+                border: "1.5px solid #e53e3e",
+                borderRadius: "8px",
+                padding: "8px 12px",
                 fontSize: "13px",
+                color: "#c0392b",
                 marginBottom: "12px",
+                display: "flex",
+                gap: "6px",
               }}
             >
-              <span>⚠</span> {error}
+              <span>⚠</span>
+              <span>{error}</span>
             </div>
           )}
 
+          {/* rules */}
           {!error && (
             <p
               style={{
-                fontSize: "12px",
+                fontSize: "11px",
                 color: "#aaa",
                 margin: "0 0 16px",
-                lineHeight: 1.5,
+                lineHeight: 1.6,
               }}
             >
-              Your ID is 2–10 characters, e.g. <strong>P007</strong> or{" "}
-              <strong>PART12</strong>. Check your invitation email if unsure.
+              {mode === "new"
+                ? "Letters and numbers only, 2–20 characters. Choose something memorable — you'll need it again."
+                : "Enter exactly the ID you used when you first signed up."}
             </p>
           )}
 
           <button
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !value}
             style={{
               width: "100%",
               padding: "15px",
-              background: loading ? "#555" : "#1a2e1a",
+              background: loading || !value ? "#ccc" : "#1a2e1a",
               color: "#fff",
               border: "none",
               borderRadius: "10px",
               fontSize: "16px",
               fontWeight: 700,
-              cursor: loading ? "not-allowed" : "pointer",
+              cursor: loading || !value ? "not-allowed" : "pointer",
               transition: "background 0.2s",
             }}
           >
-            {loading ? "Checking..." : "Continue →"}
+            {loading
+              ? mode === "new"
+                ? "Creating ID..."
+                : "Checking..."
+              : mode === "new"
+                ? "Create & Continue →"
+                : "Continue →"}
           </button>
         </div>
 
-        {/* Info strip */}
+        {/* trust strip */}
         <div
           style={{
             marginTop: "1.5rem",
@@ -297,27 +393,13 @@ export default function Login({ onLogin, onBack }: Props) {
             <div key={i} style={{ textAlign: "center" }}>
               <div style={{ fontSize: "18px" }}>{item.icon}</div>
               <div
-                style={{ fontSize: "11px", color: "#7a8a9a", marginTop: "3px" }}
+                style={{ fontSize: "11px", color: "#5a6a7a", marginTop: "3px" }}
               >
                 {item.label}
               </div>
             </div>
           ))}
         </div>
-
-        <p
-          style={{
-            marginTop: "1.5rem",
-            fontSize: "12px",
-            color: "#5a6a7a",
-            textAlign: "center",
-            maxWidth: "280px",
-            lineHeight: 1.6,
-          }}
-        >
-          Don't have an ID? You need an invitation from the research team to
-          participate.
-        </p>
       </div>
     </div>
   );
