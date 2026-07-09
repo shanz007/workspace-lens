@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 interface Props {
   imageBlob: Blob;
@@ -9,8 +9,25 @@ interface Props {
 }
 
 type Tool = "blackbox" | "blur";
+type InteractionMode = "idle" | "drawing" | "moving" | "resizing";
+type ResizeHandle = "tl" | "tr" | "bl" | "br" | "t" | "b" | "l" | "r";
+
+interface CensorBox {
+  id: string;
+  type: Tool;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface HistoryEntry {
+  boxes: CensorBox[];
+}
 
 const MIN_FILE_SIZE_KB = 50;
+const HANDLE_SIZE = 10; // px in canvas coords
+const MIN_BOX_SIZE = 15;
 
 export default function PrivacyEditor({
   imageBlob,
@@ -21,82 +38,219 @@ export default function PrivacyEditor({
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imageRef = useRef<HTMLImageElement>(new Image());
-  const drawingRef = useRef(false);
-  const startRef = useRef({ x: 0, y: 0 });
+  const imageLoadedRef = useRef(false);
 
+  // ── interaction state (all in refs to avoid stale closures) ──────────────
+  const modeRef = useRef<InteractionMode>("idle");
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const activeIdRef = useRef<string | null>(null);
+  const resizeHandleRef = useRef<ResizeHandle | null>(null);
+  const boxBeforeDragRef = useRef<CensorBox | null>(null);
+
+  // ── boxes + history ───────────────────────────────────────────────────────
+  const [boxes, setBoxes] = useState<CensorBox[]>([]);
+  const boxesRef = useRef<CensorBox[]>([]); // mirror for use in pointer handlers
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const historyRef = useRef<HistoryEntry[]>([]);
+  const redoRef = useRef<HistoryEntry[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+
+  // ── UI state ──────────────────────────────────────────────────────────────
   const [tool, setTool] = useState<Tool>("blackbox");
-  const [actionCount, setActionCount] = useState(0);
   const [reviewed, setReviewed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [validationError, setValidationError] = useState("");
   const [showLogout, setShowLogout] = useState(false);
   const [includeGPS, setIncludeGPS] = useState(false);
-  const historyRef = useRef<ImageData[]>([]);
-  const redoRef = useRef<ImageData[]>([]);
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
 
   const [fileSizeError] = useState<string>(() => {
     const sizeKB = imageBlob.size / 1024;
     return sizeKB < MIN_FILE_SIZE_KB
-      ? `This photo appears too small (${sizeKB.toFixed(0)} KB). Please retake with a real workspace photo.`
+      ? `This photo appears too small (${sizeKB.toFixed(0)} KB). Please retake.`
       : "";
   });
 
-  const saveHistory = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d")!;
-    historyRef.current.push(
-      ctx.getImageData(0, 0, canvas.width, canvas.height),
-    );
-    redoRef.current = [];
-    if (historyRef.current.length > 20) historyRef.current.shift();
-    setCanUndo(true);
-    setCanRedo(false);
-  };
+  // keep boxesRef in sync
+  useEffect(() => {
+    boxesRef.current = boxes;
+  }, [boxes]);
 
-  const undo = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || historyRef.current.length === 0) return;
-    const ctx = canvas.getContext("2d")!;
-    redoRef.current.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    const prev = historyRef.current.pop()!;
-    ctx.putImageData(prev, 0, 0);
-    setActionCount((c) => Math.max(0, c - 1));
-    setConfirming(false);
-    setValidationError("");
-    setCanUndo(historyRef.current.length > 0);
-    setCanRedo(true);
-  };
+   // ── handle positions ──────────────────────────────────────────────────────
+  const getHandlePositions = (x: number, y: number, w: number, h: number) =>
+    ({
+      tl: [x, y],
+      t: [x + w / 2, y],
+      tr: [x + w, y],
+      l: [x, y + h / 2],
+      r: [x + w, y + h / 2],
+      bl: [x, y + h],
+      b: [x + w / 2, y + h],
+      br: [x + w, y + h],
+    }) as Record<ResizeHandle, [number, number]>;
 
-  const redo = () => {
-    const canvas = canvasRef.current;
-    if (!canvas || redoRef.current.length === 0) return;
-    const ctx = canvas.getContext("2d")!;
-    historyRef.current.push(
-      ctx.getImageData(0, 0, canvas.width, canvas.height),
-    );
-    const next = redoRef.current.pop()!;
-    ctx.putImageData(next, 0, 0);
-    setActionCount((c) => c + 1);
-    setConfirming(false);
-    setCanUndo(true);
-    setCanRedo(redoRef.current.length > 0);
-  };
+  // ── redraw canvas from boxes array ───────────────────────────────────────
+  const redraw = useCallback(
+    (currentBoxes: CensorBox[], selId?: string | null) => {
+      const canvas = canvasRef.current;
+      if (!canvas || !imageLoadedRef.current) return;
+      const ctx = canvas.getContext("2d")!;
 
+      // draw base image
+      ctx.drawImage(imageRef.current, 0, 0);
+
+      currentBoxes.forEach((box) => {
+        const { x, y, w, h, type } = box;
+        const ax = Math.min(x, x + w);
+        const ay = Math.min(y, y + h);
+        const aw = Math.abs(w);
+        const ah = Math.abs(h);
+
+        if (type === "blackbox") {
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(ax, ay, aw, ah);
+        } else {
+          // pixelation blur
+          const blockSize = 14;
+          for (let bx = ax; bx < ax + aw; bx += blockSize) {
+            for (let by = ay; by < ay + ah; by += blockSize) {
+              const bw = Math.min(blockSize, ax + aw - bx);
+              const bh = Math.min(blockSize, ay + ah - by);
+              const pixel = ctx.getImageData(bx, by, 1, 1).data;
+              ctx.fillStyle = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+              ctx.fillRect(bx, by, bw, bh);
+            }
+          }
+        }
+
+        // draw selection outline + handles
+        const sid = selId !== undefined ? selId : selectedId;
+        if (box.id === sid) {
+          ctx.strokeStyle = "#4a90e2";
+          ctx.lineWidth = Math.max(2, canvas.width * 0.002);
+          ctx.setLineDash([8, 4]);
+          ctx.strokeRect(ax, ay, aw, ah);
+          ctx.setLineDash([]);
+
+          // corner + edge handles
+          const hs =
+            HANDLE_SIZE *
+            (canvas.width / (canvasRef.current?.clientWidth || canvas.width));
+          const handles = getHandlePositions(ax, ay, aw, ah);
+          Object.values(handles).forEach(([hx, hy]) => {
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(hx - hs / 2, hy - hs / 2, hs, hs);
+            ctx.strokeStyle = "#4a90e2";
+            ctx.lineWidth = Math.max(1, canvas.width * 0.001);
+            ctx.strokeRect(hx - hs / 2, hy - hs / 2, hs, hs);
+          });
+        }
+      });
+    },
+    [selectedId],
+  );
+
+   // ── load image ────────────────────────────────────────────────────────────
   useEffect(() => {
     const url = URL.createObjectURL(imageBlob);
     imageRef.current.onload = () => {
+      imageLoadedRef.current = true;
       const canvas = canvasRef.current!;
       canvas.width = imageRef.current.naturalWidth;
       canvas.height = imageRef.current.naturalHeight;
-      canvas.getContext("2d")!.drawImage(imageRef.current, 0, 0);
+      redraw([]);
     };
     imageRef.current.src = url;
     return () => URL.revokeObjectURL(url);
   }, [imageBlob]);
 
+  // redraw when boxes or selection changes
+  useEffect(() => {
+    redraw(boxes, selectedId);
+  }, [boxes, selectedId, redraw]);
+
+  // ── canvas coordinate helper ──────────────────────────────────────────────
+  const getCanvasPos = (e: React.PointerEvent) => {
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (canvas.width / rect.width),
+      y: (e.clientY - rect.top) * (canvas.height / rect.height),
+    };
+  };
+
+  // ── hit detection ─────────────────────────────────────────────────────────
+  const hitHandle = (
+    pos: { x: number; y: number },
+    box: CensorBox,
+  ): ResizeHandle | null => {
+    const canvas = canvasRef.current!;
+    const scaleX = canvas.width / (canvas.clientWidth || canvas.width);
+    const hs = HANDLE_SIZE * scaleX * 1.5; // generous touch area
+    const ax = Math.min(box.x, box.x + box.w);
+    const ay = Math.min(box.y, box.y + box.h);
+    const aw = Math.abs(box.w);
+    const ah = Math.abs(box.h);
+    const handles = getHandlePositions(ax, ay, aw, ah);
+    for (const [key, [hx, hy]] of Object.entries(handles)) {
+      if (Math.abs(pos.x - hx) < hs && Math.abs(pos.y - hy) < hs) {
+        return key as ResizeHandle;
+      }
+    }
+    return null;
+  };
+
+  const hitBox = (pos: { x: number; y: number }, box: CensorBox): boolean => {
+    const ax = Math.min(box.x, box.x + box.w);
+    const ay = Math.min(box.y, box.y + box.h);
+    const aw = Math.abs(box.w);
+    const ah = Math.abs(box.h);
+    return pos.x >= ax && pos.x <= ax + aw && pos.y >= ay && pos.y <= ay + ah;
+  };
+
+  // ── history helpers ───────────────────────────────────────────────────────
+  const pushHistory = (currentBoxes: CensorBox[]) => {
+    historyRef.current.push({
+      boxes: JSON.parse(JSON.stringify(currentBoxes)),
+    });
+    redoRef.current = [];
+    if (historyRef.current.length > 30) historyRef.current.shift();
+    setCanUndo(true);
+    setCanRedo(false);
+  };
+
+  const undo = () => {
+    if (historyRef.current.length === 0) return;
+    redoRef.current.push({
+      boxes: JSON.parse(JSON.stringify(boxesRef.current)),
+    });
+    const prev = historyRef.current.pop()!;
+    setBoxes(prev.boxes);
+    setSelectedId(null);
+    setCanUndo(historyRef.current.length > 0);
+    setCanRedo(true);
+  };
+
+  const redo = () => {
+    if (redoRef.current.length === 0) return;
+    historyRef.current.push({
+      boxes: JSON.parse(JSON.stringify(boxesRef.current)),
+    });
+    const next = redoRef.current.pop()!;
+    setBoxes(next.boxes);
+    setSelectedId(null);
+    setCanUndo(true);
+    setCanRedo(redoRef.current.length > 0);
+  };
+
+  // ── delete a box ──────────────────────────────────────────────────────────
+  const deleteBox = (id: string) => {
+    pushHistory(boxesRef.current);
+    setBoxes((prev) => prev.filter((b) => b.id !== id));
+    setSelectedId(null);
+  };
+
+  // ── keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       const isMac = navigator.platform.includes("Mac");
@@ -109,72 +263,207 @@ export default function PrivacyEditor({
         e.preventDefault();
         redo();
       }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        e.preventDefault();
+        deleteBox(selectedId);
+      }
+      if (e.key === "Escape") setSelectedId(null);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, []);
+  }, [selectedId]);
 
-  const getPos = (e: React.PointerEvent) => {
-    const canvas = canvasRef.current!;
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: (e.clientX - rect.left) * (canvas.width / rect.width),
-      y: (e.clientY - rect.top) * (canvas.height / rect.height),
-    };
-  };
-
+  // ── pointer events ────────────────────────────────────────────────────────
   const onPointerDown = (e: React.PointerEvent) => {
-    saveHistory();
-    drawingRef.current = true;
-    startRef.current = getPos(e);
-    setConfirming(false);
-    setValidationError("");
-  };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const pos = getCanvasPos(e);
+    const currentBoxes = boxesRef.current;
 
-  const applyBlur = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    w: number,
-    h: number,
-  ) => {
-    const blockSize = 12;
-    const absX = Math.min(x, x + w);
-    const absY = Math.min(y, y + h);
-    const absW = Math.abs(w);
-    const absH = Math.abs(h);
-    for (let bx = absX; bx < absX + absW; bx += blockSize) {
-      for (let by = absY; by < absY + absH; by += blockSize) {
-        const bw = Math.min(blockSize, absX + absW - bx);
-        const bh = Math.min(blockSize, absY + absH - by);
-        const pixel = ctx.getImageData(bx, by, 1, 1).data;
-        ctx.fillStyle = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
-        ctx.fillRect(bx, by, bw, bh);
+    // check selected box handles first
+    if (selectedId) {
+      const selBox = currentBoxes.find((b) => b.id === selectedId);
+      if (selBox) {
+        const handle = hitHandle(pos, selBox);
+        if (handle) {
+          modeRef.current = "resizing";
+          resizeHandleRef.current = handle;
+          activeIdRef.current = selectedId;
+          boxBeforeDragRef.current = { ...selBox };
+          dragStartRef.current = pos;
+          pushHistory(currentBoxes);
+          return;
+        }
+        // check move
+        if (hitBox(pos, selBox)) {
+          modeRef.current = "moving";
+          activeIdRef.current = selectedId;
+          boxBeforeDragRef.current = { ...selBox };
+          dragStartRef.current = pos;
+          pushHistory(currentBoxes);
+          return;
+        }
       }
     }
+
+    // check any box (back to front)
+    for (let i = currentBoxes.length - 1; i >= 0; i--) {
+      const box = currentBoxes[i];
+      const handle = hitHandle(pos, box);
+      if (handle) {
+        setSelectedId(box.id);
+        modeRef.current = "resizing";
+        resizeHandleRef.current = handle;
+        activeIdRef.current = box.id;
+        boxBeforeDragRef.current = { ...box };
+        dragStartRef.current = pos;
+        pushHistory(currentBoxes);
+        return;
+      }
+      if (hitBox(pos, box)) {
+        setSelectedId(box.id);
+        modeRef.current = "moving";
+        activeIdRef.current = box.id;
+        boxBeforeDragRef.current = { ...box };
+        dragStartRef.current = pos;
+        pushHistory(currentBoxes);
+        return;
+      }
+    }
+
+    // start drawing new box
+    setSelectedId(null);
+    modeRef.current = "drawing";
+    dragStartRef.current = pos;
+    activeIdRef.current = crypto.randomUUID();
+    pushHistory(currentBoxes);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const pos = getCanvasPos(e);
+    const mode = modeRef.current;
+
+    if (mode === "drawing") {
+      const newBox: CensorBox = {
+        id: activeIdRef.current!,
+        type: tool,
+        x: dragStartRef.current.x,
+        y: dragStartRef.current.y,
+        w: pos.x - dragStartRef.current.x,
+        h: pos.y - dragStartRef.current.y,
+      };
+      const withoutCurrent = boxesRef.current.filter(
+        (b) => b.id !== activeIdRef.current,
+      );
+      const updated = [...withoutCurrent, newBox];
+      boxesRef.current = updated;
+      redraw(updated, activeIdRef.current);
+      return;
+    }
+
+    if (mode === "moving" && activeIdRef.current) {
+      const dx = pos.x - dragStartRef.current.x;
+      const dy = pos.y - dragStartRef.current.y;
+      const orig = boxBeforeDragRef.current!;
+      setBoxes((prev) =>
+        prev.map((b) =>
+          b.id === activeIdRef.current
+            ? { ...b, x: orig.x + dx, y: orig.y + dy }
+            : b,
+        ),
+      );
+      return;
+    }
+
+    if (mode === "resizing" && activeIdRef.current && resizeHandleRef.current) {
+      const dx = pos.x - dragStartRef.current.x;
+      const dy = pos.y - dragStartRef.current.y;
+      const orig = boxBeforeDragRef.current!;
+      const handle = resizeHandleRef.current;
+
+      setBoxes((prev) =>
+        prev.map((b) => {
+          if (b.id !== activeIdRef.current) return b;
+          let { x, y, w, h } = orig;
+          if (handle.includes("r")) w = Math.max(MIN_BOX_SIZE, orig.w + dx);
+          if (handle.includes("b")) h = Math.max(MIN_BOX_SIZE, orig.h + dy);
+          if (handle.includes("l")) {
+            x = orig.x + dx;
+            w = Math.max(MIN_BOX_SIZE, orig.w - dx);
+          }
+          if (handle.includes("t")) {
+            y = orig.y + dy;
+            h = Math.max(MIN_BOX_SIZE, orig.h - dy);
+          }
+          return { ...b, x, y, w, h };
+        }),
+      );
+    }
+
+    // update cursor
+    const canvas = canvasRef.current!;
+    const currentBoxes = boxesRef.current;
+    let cursor = "crosshair";
+    for (let i = currentBoxes.length - 1; i >= 0; i--) {
+      const handle = hitHandle(pos, currentBoxes[i]);
+      if (handle) {
+        const cursors: Record<ResizeHandle, string> = {
+          tl: "nw-resize",
+          tr: "ne-resize",
+          bl: "sw-resize",
+          br: "se-resize",
+          t: "n-resize",
+          b: "s-resize",
+          l: "w-resize",
+          r: "e-resize",
+        };
+        cursor = cursors[handle];
+        break;
+      }
+      if (hitBox(pos, currentBoxes[i])) {
+        cursor = "move";
+        break;
+      }
+    }
+    canvas.style.cursor = cursor;
   };
 
   const onPointerUp = (e: React.PointerEvent) => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    const end = getPos(e);
-    const ctx = canvasRef.current!.getContext("2d")!;
-    const w = end.x - startRef.current.x;
-    const h = end.y - startRef.current.y;
-    if (Math.abs(w) < 10 || Math.abs(h) < 10) return;
-    if (tool === "blackbox") {
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(startRef.current.x, startRef.current.y, w, h);
-    } else {
-      applyBlur(ctx, startRef.current.x, startRef.current.y, w, h);
+    const mode = modeRef.current;
+
+    if (mode === "drawing") {
+      const pos = getCanvasPos(e);
+      const w = pos.x - dragStartRef.current.x;
+      const h = pos.y - dragStartRef.current.y;
+      if (Math.abs(w) < MIN_BOX_SIZE || Math.abs(h) < MIN_BOX_SIZE) {
+        // too small — cancel
+        setBoxes(boxesRef.current.filter((b) => b.id !== activeIdRef.current));
+        historyRef.current.pop(); // remove the history entry we pushed
+        setCanUndo(historyRef.current.length > 0);
+      } else {
+        const newBox: CensorBox = {
+          id: activeIdRef.current!,
+          type: tool,
+          x: dragStartRef.current.x,
+          y: dragStartRef.current.y,
+          w,
+          h,
+        };
+        setBoxes((prev) => {
+          const without = prev.filter((b) => b.id !== activeIdRef.current);
+          return [...without, newBox];
+        });
+        setSelectedId(activeIdRef.current);
+      }
     }
-    setActionCount((c) => c + 1);
+
+    modeRef.current = "idle";
+    activeIdRef.current = null;
   };
 
+  // ── reset ─────────────────────────────────────────────────────────────────
   const reset = () => {
-    const ctx = canvasRef.current!.getContext("2d")!;
-    ctx.drawImage(imageRef.current, 0, 0);
-    setActionCount(0);
+    setBoxes([]);
+    setSelectedId(null);
     setReviewed(false);
     setConfirming(false);
     setValidationError("");
@@ -184,6 +473,7 @@ export default function PrivacyEditor({
     setCanRedo(false);
   };
 
+  // ── export: flatten boxes onto image ─────────────────────────────────────
   const handleUploadTap = () => {
     if (fileSizeError) {
       setValidationError(fileSizeError);
@@ -200,16 +490,44 @@ export default function PrivacyEditor({
       setValidationError("");
       return;
     }
-    // All conditions met — export and upload
-    canvasRef.current!.toBlob(
+
+    // draw final image with no selection outlines
+    const canvas = canvasRef.current!;
+    const ctx = canvas.getContext("2d")!;
+    ctx.drawImage(imageRef.current, 0, 0);
+    boxes.forEach((box) => {
+      const ax = Math.min(box.x, box.x + box.w);
+      const ay = Math.min(box.y, box.y + box.h);
+      const aw = Math.abs(box.w);
+      const ah = Math.abs(box.h);
+      if (box.type === "blackbox") {
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(ax, ay, aw, ah);
+      } else {
+        const blockSize = 14;
+        for (let bx = ax; bx < ax + aw; bx += blockSize) {
+          for (let by = ay; by < ay + ah; by += blockSize) {
+            const bw = Math.min(blockSize, ax + aw - bx);
+            const bh = Math.min(blockSize, ay + ah - by);
+            const pixel = ctx.getImageData(bx, by, 1, 1).data;
+            ctx.fillStyle = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+            ctx.fillRect(bx, by, bw, bh);
+          }
+        }
+      }
+    });
+    canvas.toBlob(
       (blob) => {
         if (blob) onConfirm(blob, includeGPS);
-      }, // ← pass includeGPS
+      },
       "image/jpeg",
       0.92,
     );
   };
 
+  const actionCount = boxes.length;
+
+  // ── render ────────────────────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -223,7 +541,7 @@ export default function PrivacyEditor({
         overflow: "hidden",
       }}
     >
-      {/* ── NAVBAR ── */}
+      {/* NAVBAR */}
       <nav
         style={{
           display: "flex",
@@ -238,8 +556,6 @@ export default function PrivacyEditor({
         <span style={{ fontWeight: 700, fontSize: "15px", color: "#fff" }}>
           🌿 Censor Photo
         </span>
-
-        {/* Participant badge + logout */}
         <button
           onClick={() => setShowLogout((o) => !o)}
           style={{
@@ -261,7 +577,7 @@ export default function PrivacyEditor({
         </button>
       </nav>
 
-      {/* ── LOGOUT DROPDOWN ── */}
+      {/* LOGOUT DROPDOWN */}
       {showLogout && (
         <>
           <div
@@ -360,7 +676,7 @@ export default function PrivacyEditor({
         </>
       )}
 
-      {/* ── TOOL BAR ── */}
+      {/* TOOLBAR */}
       <div
         style={{
           padding: "8px 1rem",
@@ -369,9 +685,24 @@ export default function PrivacyEditor({
           flexShrink: 0,
         }}
       >
-        {/* Tool selector + undo/redo */}
+        {fileSizeError && (
+          <div
+            style={{
+              background: "#fff0f0",
+              border: "1.5px solid #e53e3e",
+              borderRadius: "8px",
+              padding: "8px 12px",
+              fontSize: "13px",
+              color: "#c0392b",
+              marginBottom: "8px",
+            }}
+          >
+            ❌ {fileSizeError}
+          </div>
+        )}
+
         {!fileSizeError && (
-          <div style={{ display: "flex", gap: "6px", marginBottom: "0.5rem" }}>
+          <div style={{ display: "flex", gap: "6px", marginBottom: "6px" }}>
             {/* tool buttons */}
             <button
               onClick={() => setTool("blackbox")}
@@ -406,12 +737,11 @@ export default function PrivacyEditor({
               🌫 Blur
             </button>
 
-            {/* divider */}
             <div
               style={{ width: "1px", background: "#ddd", margin: "4px 0" }}
             />
 
-            {/* undo */}
+            {/* undo / redo */}
             <button
               onClick={undo}
               disabled={!canUndo}
@@ -433,8 +763,6 @@ export default function PrivacyEditor({
             >
               ↩
             </button>
-
-            {/* redo */}
             <button
               onClick={redo}
               disabled={!canRedo}
@@ -456,81 +784,81 @@ export default function PrivacyEditor({
             >
               ↪
             </button>
-          </div>
-        )}
-        {/* File size error */}
-        {fileSizeError && (
-          <div
-            style={{
-              background: "#fff0f0",
-              border: "1.5px solid #e53e3e",
-              borderRadius: "8px",
-              padding: "8px 12px",
-              fontSize: "13px",
-              color: "#c0392b",
-              marginBottom: "8px",
-            }}
-          >
-            ❌ {fileSizeError}
+
+            {/* delete selected */}
+            {selectedId && (
+              <button
+                onClick={() => deleteBox(selectedId)}
+                title="Delete selected (Delete key)"
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "1.5px solid #e53e3e",
+                  background: "#fff5f5",
+                  color: "#e53e3e",
+                  cursor: "pointer",
+                  fontSize: "15px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: "38px",
+                }}
+              >
+                🗑
+              </button>
+            )}
           </div>
         )}
 
-        {/* Action count badge */}
-        {actionCount >= 0 && (
-          <div
-            style={{
-              background: "#e1f5ee",
-              border: "1px solid #7dc355",
-              borderRadius: "20px",
-              padding: "4px 10px",
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "#1a5c2a",
-              whiteSpace: "nowrap",
-              flexShrink: 0,
-            }}
-          >
-            ✓ {actionCount} area{actionCount > 1 ? "s" : ""}
-          </div>
-        )}
-
-        {/* Instruction hint */}
-        <p
-          style={{
-            margin: "6px 0 0",
-            fontSize: "12px",
-            color: "#888",
-            lineHeight: 1.4,
-          }}
-        >
-          {tool === "blackbox"
-            ? "⬛ Drag to draw black boxes over faces, screens, or names to mask."
-            : "🌫 Drag to pixelate sensitive areas."}
-          {canUndo && (
-            <span style={{ color: "#1a2e1a", fontWeight: 500 }}>
-              {" "}
-              · Ctrl+Z to undo
-            </span>
+        {/* status + hint */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {actionCount > 0 && (
+            <div
+              style={{
+                background: "#e1f5ee",
+                border: "1px solid #7dc355",
+                borderRadius: "20px",
+                padding: "3px 10px",
+                fontSize: "11px",
+                fontWeight: 600,
+                color: "#1a5c2a",
+                whiteSpace: "nowrap",
+              }}
+            >
+              ✓ {actionCount} box{actionCount > 1 ? "es" : ""}
+            </div>
           )}
-        </p>
+          <p
+            style={{
+              margin: 0,
+              fontSize: "11px",
+              color: "#888",
+              lineHeight: 1.4,
+            }}
+          >
+            {selectedId
+              ? "Drag to move · drag handles to resize · 🗑 or Delete key to remove"
+              : "Drag on photo to add a censor box · tap a box to select it"}
+          </p>
+        </div>
       </div>
 
-      {/* ── CANVAS ── */}
+      {/* CANVAS */}
       <canvas
         ref={canvasRef}
         style={{
           width: "100%",
           flexShrink: 1,
           minHeight: 0,
-          cursor: "crosshair",
           touchAction: "none",
           display: "block",
         }}
         onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
       />
 
-      {/* ── BOTTOM PANEL ── */}
+      {/* BOTTOM PANEL */}
       <div
         style={{
           background: "#fff",
@@ -539,90 +867,84 @@ export default function PrivacyEditor({
           flexShrink: 0,
         }}
       >
-        {/* Review checkbox */}
-        {actionCount >= 0 && (
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "10px",
-              cursor: "pointer",
-              padding: "10px 12px",
-              background: reviewed ? "#f0f9e8" : "#f9f9f9",
-              borderRadius: "10px",
-              border: `1.5px solid ${reviewed ? "#7dc355" : "#ddd"}`,
-              transition: "all 0.2s",
+        {/* review checkbox */}
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            marginBottom: "10px",
+            cursor: "pointer",
+            padding: "10px 12px",
+            background: reviewed ? "#f0f9e8" : "#f9f9f9",
+            borderRadius: "10px",
+            border: `1.5px solid ${reviewed ? "#7dc355" : "#ddd"}`,
+            transition: "all 0.2s",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={reviewed}
+            onChange={(e) => {
+              setReviewed(e.target.checked);
+              setValidationError("");
             }}
-          >
-            <input
-              type="checkbox"
-              checked={reviewed}
-              onChange={(e) => {
-                setReviewed(e.target.checked);
-                setValidationError("");
-              }}
-              style={{
-                width: "20px",
-                height: "20px",
-                cursor: "pointer",
-                flexShrink: 0,
-                accentColor: "#1a2e1a",
-              }}
-            />
-            <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.5 }}>
-              I have reviewed the image and am happy to submit it.
-            </span>
-          </label>
-        )}
-        {/* GPS consent checkbox — shown alongside review checkbox */}
-        {actionCount >= 0 && (
-          <label
             style={{
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "10px",
-              marginBottom: "10px",
+              width: "20px",
+              height: "20px",
               cursor: "pointer",
-              padding: "10px 12px",
-              background: includeGPS ? "#f0f4ff" : "#f9f9f9",
-              borderRadius: "10px",
-              border: `1.5px solid ${includeGPS ? "#4a7adb" : "#ddd"}`,
-              transition: "all 0.2s",
-              textAlign: "left",
+              flexShrink: 0,
+              accentColor: "#1a2e1a",
             }}
-          >
-            <input
-              type="checkbox"
-              checked={includeGPS}
-              onChange={(e) => setIncludeGPS(e.target.checked)}
-              style={{
-                width: "20px",
-                height: "20px",
-                cursor: "pointer",
-                flexShrink: 0,
-                accentColor: "#4a7adb",
-                marginTop: "1px",
-              }}
-            />
-            <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.5 }}>
-              Include my approximate GPS location with this submission
-              <span
-                style={{
-                  display: "block",
-                  fontSize: "11px",
-                  color: "#888",
-                  marginTop: "2px",
-                }}
-              >
-                Optional — helps researchers map outdoor workspace locations.
-                You can leave this unticked.
-              </span>
-            </span>
-          </label>
-        )}
+          />
+          <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.5 }}>
+            I have reviewed the image and am happy to submit it.
+          </span>
+        </label>
 
-        {/* Validation error */}
+        {/* GPS checkbox */}
+        <label
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "10px",
+            marginBottom: "10px",
+            cursor: "pointer",
+            padding: "10px 12px",
+            background: includeGPS ? "#f0f4ff" : "#f9f9f9",
+            borderRadius: "10px",
+            border: `1.5px solid ${includeGPS ? "#4a7adb" : "#ddd"}`,
+            transition: "all 0.2s",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={includeGPS}
+            onChange={(e) => setIncludeGPS(e.target.checked)}
+            style={{
+              width: "20px",
+              height: "20px",
+              cursor: "pointer",
+              flexShrink: 0,
+              accentColor: "#4a7adb",
+              marginTop: "1px",
+            }}
+          />
+          <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.5 }}>
+            📍 Include my approximate GPS location
+            <span
+              style={{
+                display: "block",
+                fontSize: "11px",
+                color: "#888",
+                marginTop: "2px",
+              }}
+            >
+              Optional — helps researchers map outdoor workspace locations.
+            </span>
+          </span>
+        </label>
+
         {validationError && (
           <div
             style={{
@@ -643,7 +965,6 @@ export default function PrivacyEditor({
           </div>
         )}
 
-        {/* Confirmation banner */}
         {confirming && (
           <div
             style={{
@@ -656,12 +977,11 @@ export default function PrivacyEditor({
               color: "#7a5f00",
             }}
           >
-            ⚠️ Once submitted, it cannot be edited or deleted. Tap{" "}
-            <strong>Confirm &amp; Send</strong> to proceed to survey.
+            ⚠️ Once submitted it cannot be edited or deleted. Tap{" "}
+            <strong>Confirm &amp; Send</strong> to proceed.
           </div>
         )}
 
-        {/* Action buttons */}
         <div style={{ display: "flex", gap: "8px" }}>
           <button
             onClick={onRetake}
@@ -679,7 +999,6 @@ export default function PrivacyEditor({
           >
             📷 Retake
           </button>
-
           <button
             onClick={reset}
             style={{
@@ -694,9 +1013,8 @@ export default function PrivacyEditor({
               fontWeight: 500,
             }}
           >
-            {confirming ? "✕ Cancel" : "🗑️ Clear"}
+            {confirming ? "✕ Cancel" : "🗑️ Clear all"}
           </button>
-
           <button
             onClick={handleUploadTap}
             disabled={!!fileSizeError}
