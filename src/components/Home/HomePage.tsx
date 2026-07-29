@@ -376,7 +376,7 @@ export default function HomePage({ onGetStarted }: Props) {
           <strong style={{ color: "#a8e063" }}>
             outdoor and semi-outdoor spaces
           </strong>{" "}
-          — parks, terraces, courtyards, café patios — as places of knowledge
+          - parks, terraces, courtyards, café patios as places of knowledge
           work.
         </p>
         <p
@@ -482,7 +482,7 @@ export default function HomePage({ onGetStarted }: Props) {
             Your Task
           </h2>
           <p style={{ color: "#999", fontSize: "13px", margin: "0 0 1.5rem" }}>
-            Simple — but please read carefully so your photo is useful for the
+            Simple - but please read carefully so your photo is useful for the
             research.
           </p>
 
@@ -500,7 +500,7 @@ export default function HomePage({ onGetStarted }: Props) {
             <h3
               style={{ margin: "0 0 8px", color: "#1a2e1a", fontSize: "15px" }}
             >
-              Photograph your GAZE — not your desk
+              Photograph your GAZE but not your desk
             </h3>
             <p
               style={{
@@ -546,7 +546,7 @@ export default function HomePage({ onGetStarted }: Props) {
               "A café terrace or outdoor seating area",
               "A courtyard, balcony, or rooftop space",
               "A covered but open semi-outdoor area",
-              "Trees, sky, buildings — whatever is in front of you",
+              "Trees, sky, buildings simply whatever is in front of you",
             ].map((t, i) => (
               <div
                 key={i}
@@ -653,7 +653,7 @@ export default function HomePage({ onGetStarted }: Props) {
             {
               icon: "☁️",
               step: "6",
-              title: "Submmt the photo upon confirming.",
+              title: "Submit the photo upon confirming.",
             },
           ].map((item) => (
             <div
@@ -733,8 +733,8 @@ export default function HomePage({ onGetStarted }: Props) {
             This study is conducted by the{" "}
             <strong>CrowdComputing research group</strong>. We are investigating
             how people use{" "}
-            <strong>outdoor and semi-outdoor environments</strong>— parks,
-            terraces, courtyards, café patios, and covered-but-open spaces — as
+            <strong>outdoor and semi-outdoor environments</strong> - parks,
+            terraces, courtyards, café patios, and covered-but-open spaces as
             places of knowledge work.
           </p>
           <p
@@ -746,12 +746,12 @@ export default function HomePage({ onGetStarted }: Props) {
             }}
           >
             Your photos will be analysed using computer vision to detect
-            environmental elements —{" "}
+            environmental elements like{" "}
             <strong>
               natural light, greenery, built structures, shelter, and sky
             </strong>{" "}
-            — and combined with your short survey responses to build a picture
-            of what outdoor workspaces actually look like in practice.
+            and combined with your short survey responses to build a picture of
+            what outdoor workspaces actually look like in practice.
           </p>
 
           <div
@@ -1044,7 +1044,7 @@ export default function HomePage({ onGetStarted }: Props) {
           WorkspaceLens · CrowdComputing Research Group
         </p>
         <p style={{ margin: "0 0 4px" }}>
-          Studying outdoor knowledge work environments · 2025
+          Studying outdoor knowledge work environments · 2026
         </p>
         <p style={{ margin: 0 }}>Questions? Reply to your invitation email.</p>
       </div>

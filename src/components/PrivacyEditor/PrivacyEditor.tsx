@@ -76,7 +76,7 @@ export default function PrivacyEditor({
     boxesRef.current = boxes;
   }, [boxes]);
 
-   // ── handle positions ──────────────────────────────────────────────────────
+  // ── handle positions ──────────────────────────────────────────────────────
   const getHandlePositions = (x: number, y: number, w: number, h: number) =>
     ({
       tl: [x, y],
@@ -150,7 +150,7 @@ export default function PrivacyEditor({
     [selectedId],
   );
 
-   // ── load image ────────────────────────────────────────────────────────────
+  // ── load image ────────────────────────────────────────────────────────────
   useEffect(() => {
     const url = URL.createObjectURL(imageBlob);
     imageRef.current.onload = () => {
@@ -837,8 +837,8 @@ export default function PrivacyEditor({
             }}
           >
             {selectedId
-              ? "Drag to move · drag handles to resize · 🗑 or Delete key to remove"
-              : "Drag on photo to add a censor box · tap a box to select it"}
+              ? "Drag to move · drag handles to resize · 🗑  or Delete to remove"
+              : "Drag on photo to add a censor box or tap a box to select it"}
           </p>
         </div>
       </div>
@@ -931,7 +931,7 @@ export default function PrivacyEditor({
             }}
           />
           <span style={{ fontSize: "13px", color: "#444", lineHeight: 1.5 }}>
-            📍 Include my approximate GPS location
+            Include my approximate GPS location
             <span
               style={{
                 display: "block",
