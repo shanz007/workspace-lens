@@ -219,8 +219,28 @@ export default function HomePage({ onGetStarted }: Props) {
           boxShadow: "0 2px 12px rgba(0,0,0,0.4)",
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: "17px", color: "#fff" }}>
-          🌿 WorkspaceLens
+        <span
+          style={{
+            fontWeight: 700,
+            fontSize: "17px",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <img
+            src="/pwa-192x192.png"
+            alt="WorkspaceLens"
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "8px",
+              objectFit: "cover",
+              flexShrink: 0,
+            }}
+          />
+          WorkspaceLens
         </span>
         <button
           onClick={() => setMenuOpen((o) => !o)}
