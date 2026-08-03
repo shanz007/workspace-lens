@@ -8,7 +8,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 const POKW2_PROMPT = `
 Analyse this outdoor workplace photograph for the pOKW2 research model.
-Return ONLY a JSON object with these exact fields, no other text:
+Return ONLY a valid JSON object with NO markdown, NO backticks, NO extra text.
+Every field is REQUIRED — do not skip any field:
 
 {
   "nature_score": 0.0-1.0,
@@ -33,6 +34,8 @@ Scoring guide:
 - shelter_detected: is there any overhead structure (roof, canopy, umbrella, trees)
 - people_count: number of visible people
 - greenness_index: proportion of green vegetation pixels
+- environment_type: MUST be exactly one of "outdoor", "semi-outdoor", or "indoor"
+- summary: one sentence description of the environment for the researcher
 `
 
 // ── Free vision models to try in order ───────────────────────────────────────
@@ -203,7 +206,9 @@ Deno.serve(async (req) => {
         greenness_index: scores.greenness_index,
         vision_labels: scores.labels,
         vision_raw_response: rawResponse,
-        model_used: modelUsed
+        model_used: modelUsed,
+	environment_type: scores.environment_type ?? null,
+	vision_summary: scores.summary ?? null,
       })
 
     if (insertError) throw new Error(`DB insert failed: ${insertError.message}`)
