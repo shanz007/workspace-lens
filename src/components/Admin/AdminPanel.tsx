@@ -30,7 +30,7 @@ interface Analysis {
   greenness_index: number;
   vision_labels: string[];
   environment_type: string;
-  summary: string;
+  vision_summary: string;
   model_used: string;
 }
 
@@ -530,7 +530,7 @@ function DetailPanel({
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "center",
               margin: "1rem 0 8px",
             }}
           >
@@ -580,6 +580,7 @@ function DetailPanel({
                 fontSize: "12px",
                 color: T.textPrimary,
                 lineHeight: 1.7,
+                textAlign: "left" as const,
               }}
             >
               <p
@@ -588,6 +589,7 @@ function DetailPanel({
                   fontWeight: 600,
                   color: T.textPrimary,
                   fontSize: "12px",
+                  textAlign: "left" as const,
                 }}
               >
                 pOKW2 Vision Analysis — Score Guide
@@ -672,21 +674,59 @@ function DetailPanel({
           )}{" "}
           {analysis ? (
             <>
-              <div
-                style={{
-                  background: T.greenLight,
-                  border: `1px solid #c8e0c8`,
-                  borderRadius: "8px",
-                  padding: "10px 12px",
-                  marginBottom: "12px",
-                  fontSize: "13px",
-                  color: T.textPrimary,
-                  lineHeight: 1.6,
-                }}
-              >
-                {analysis.summary}
-              </div>
+              {/* summary */}
+              {analysis.vision_summary && (
+                <div
+                  style={{
+                    background: T.greenLight,
+                    border: `1px solid #c8e0c8`,
+                    borderRadius: "8px",
+                    padding: "10px 12px",
+                    marginBottom: "12px",
+                    fontSize: "13px",
+                    color: T.textPrimary,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {analysis.vision_summary}
+                </div>
+              )}
 
+              {/* environment type badge */}
+              {analysis.environment_type && (
+                <div style={{ marginBottom: "10px" }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      background:
+                        analysis.environment_type === "outdoor"
+                          ? T.greenLight
+                          : analysis.environment_type === "semi-outdoor"
+                            ? "#fff8e8"
+                            : "#f0f4ff",
+                      color:
+                        analysis.environment_type === "outdoor"
+                          ? T.greenMid
+                          : analysis.environment_type === "semi-outdoor"
+                            ? "#8a6000"
+                            : "#1a3a6b",
+                      border: `1px solid ${
+                        analysis.environment_type === "outdoor"
+                          ? "#c8e0c8"
+                          : analysis.environment_type === "semi-outdoor"
+                            ? "#f6c90e"
+                            : "#c5d5f0"
+                      }`,
+                      borderRadius: "20px",
+                      padding: "3px 12px",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    🌍 {analysis.environment_type}
+                  </span>
+                </div>
+              )}
               <ScoreBar label="🌿 Nature" value={analysis.nature_score} />
               <ScoreBar
                 label="🏗️ Built environment"
